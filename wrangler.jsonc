@@ -1,0 +1,26 @@
+// ============================================================================
+// FILE: wrangler.jsonc
+// DESKRIPSI: Konfigurasi Cloudflare Workers & Binding Database D1
+// ============================================================================
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zxrsa-store",
+  "main": "./.output/server/index.mjs",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./.output/public/",
+    "binding": "ASSETS",
+  },
+  "observability": {
+    "enabled": true,
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "zxrsa-store-db",
+      "database_id": "0377b825-f6f4-48c5-9ac4-2714eec35462",
+      "migrations_dir": "server/database/migrations",
+    },
+  ],
+}
