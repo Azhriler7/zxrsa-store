@@ -1,64 +1,49 @@
-# Nuxt Starter Template
+# 🛡️ ZXRSA Store — Secure Game Account & Custom Gmail Webstore
 
-[![Nuxt UI](https://img.shields.io/badge/Made%20with-Nuxt%20UI-00DC82?logo=nuxt&labelColor=020420)](https://ui.nuxt.com)
+Platform webstore penjualan akun game dan layanan *Custom Gmail Premium* berkeamanan tinggi (**Zero-Trust Admin, Anti-Fraud, Atomic Stock Locking, & Encrypted Credentials**). Dibangun dengan arsitektur **Modular Component ("Lego")** dan prinsip **Object-Oriented Programming (OOP)** menggunakan **Nuxt 4.6.3**, **Nuxt UI 4.12.0**, dan **Cloudflare Workers + D1**.
 
-Use this template to get started with [Nuxt UI](https://ui.nuxt.com) quickly.
+---
 
-- [Live demo](https://starter-template.nuxt.dev/)
-- [Documentation](https://ui.nuxt.com/docs/getting-started/installation/nuxt)
+## 🔒 Arsitektur Keamanan Berlapis (Defense in Depth)
 
-<a href="https://starter-template.nuxt.dev/" target="_blank">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://ui.nuxt.com/assets/templates/nuxt/starter-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://ui.nuxt.com/assets/templates/nuxt/starter-light.png">
-    <img alt="Nuxt Starter Template" src="https://ui.nuxt.com/assets/templates/nuxt/starter-light.png" width="830" height="466">
-  </picture>
-</a>
+1. **Subdomain Isolation (`domain.com` vs `admin.domain.com`)**
+   - Pemisahan trafik secara ketat menggunakan *Global Host Middleware*.
+   - Percobaan mengakses rute `/admin/*` dari domain publik (`domain.com`) akan langsung melempar **404 Not Found**.
+2. **Double-Layer Admin Authentication**
+   - **Layer 1 (Edge):** Dilindungi oleh **Cloudflare Access (Zero Trust)** pada subdomain `admin.domain.com` (OTP Email / SSO Google hanya untuk email pemilik).
+   - **Layer 2 (Application):** Autentikasi sesi terenkripsi (`nuxt-auth-utils`) dengan akun yang dibuat secara manual di database D1 (tanpa fitur registrasi publik) + verifikasi token JWT Cloudflare Access (`Cf-Access-Jwt-Assertion`).
+3. **Dynamic QRIS + Kode Unik & HMAC-SHA256 Webhook**
+   - Mengubah QRIS Statis menjadi QRIS Dinamis dengan *CRC16-CCITT Checksum* dan kode unik nominal.
+   - Pelacakan mutasi otomatis via *Webhook* yang diamankan dengan tanda tangan kriptografi **HMAC-SHA256**.
+4. **Atomic Stock Locking (Anti-Race Condition)**
+   - Mengunci stok (`reserved`) selama 10 menit menggunakan query *Atomic Single-Statement `UPDATE ... RETURNING`* di Cloudflare D1 sehingga mustahil 2 pembeli mendapatkan 1 akun yang sama di detik yang bersamaan.
+5. **AES-256-GCM Encryption at Rest**
+   - Seluruh kredensial akun dari file `.txt` dienkripsi dengan **AES-256-GCM** sebelum disimpan ke database D1.
 
-> The starter template for Vue is on https://github.com/nuxt-ui-templates/starter-vue.
+---
 
-## Quick Start
+## 🌿 Standar Version Control & Git Workflow
 
-```bash [Terminal]
-npm create nuxt@latest -- -t ui
-```
+Proyek ini menerapkan **Feature Branch Workflow** dan **Conventional Commits**. Setiap fitur wajib dikerjakan di *branch* terpisah sebelum digabungkan (*merge*) ke `main`.
 
-## Deploy your own
+### Format Penamaan Branch:
+- `chore/<nama-setup>` — Konfigurasi proyek, library, atau tooling.
+- `ci/<nama-pipeline>` — Konfigurasi CI/CD GitHub Actions.
+- `feat/<nama-fitur>` — Penambahan fitur baru (Database, Service, UI, API).
+- `fix/<nama-bug>` — Perbaikan bug atau celah keamanan.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-name=starter&repository-url=https%3A%2F%2Fgithub.com%2Fnuxt-ui-templates%2Fstarter&demo-image=https%3A%2F%2Fui.nuxt.com%2Fassets%2Ftemplates%2Fnuxt%2Fstarter-dark.png&demo-url=https%3A%2F%2Fstarter-template.nuxt.dev%2F&demo-title=Nuxt%20Starter%20Template&demo-description=A%20minimal%20template%20to%20get%20started%20with%20Nuxt%20UI.)
-
-## Setup
-
-Make sure to install the dependencies:
-
+### Contoh Alur Kerja 1 Fitur:
 ```bash
-pnpm install
-```
+# 1. Buat branch fitur baru dari main
+git checkout -b feat/auth
 
-## Development Server
+# 2. Kerjakan fitur, lalu cek kualitas kode sebelum commit
+npm run lint
+npm run typecheck
 
-Start the development server on `http://localhost:3000`:
+# 3. Commit dengan format Conventional Commits
+git add .
+git commit -m "feat(auth): add login page and cloudflare access verification for admin"
 
-```bash
-pnpm dev
-```
-
-## Production
-
-Build the application for production:
-
-```bash
-pnpm build
-```
-
-Locally preview production build:
-
-```bash
-pnpm preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
-
-## Renovate integration
-
-Install [Renovate GitHub app](https://github.com/apps/renovate/installations/select_target) on your repository and you are good to go.
+# 4. Push branch ke GitHub untuk dicek oleh CI atau merge ke main
+git push origin feat/auth
