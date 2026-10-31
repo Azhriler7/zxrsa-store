@@ -24,8 +24,6 @@ export default defineNuxtConfig({
     webhookHmacSecret: process.env.NUXT_WEBHOOK_HMAC_SECRET || '',
     mailApiKey: process.env.NUXT_MAIL_API_KEY || '',
     mailFrom: process.env.NUXT_MAIL_FROM || '',
-    cfAccessTeamDomain: process.env.NUXT_CF_ACCESS_TEAM_DOMAIN || '',
-    cfAccessAud: process.env.NUXT_CF_ACCESS_AUD || '',
 
     // Public Keys (Bisa diakses di client & server)
     public: {
