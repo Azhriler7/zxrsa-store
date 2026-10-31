@@ -25,3 +25,8 @@ logs
 
 # seed
 server/database/seed.sql
+
+# Cloudflare Wrangler & Local D1 Database State
+.wrangler/
+.dev.vars
+.env
