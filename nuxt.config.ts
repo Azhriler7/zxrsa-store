@@ -27,10 +27,8 @@ export default defineNuxtConfig({
     mailApiKey: process.env.NUXT_MAIL_API_KEY || '',
     mailFrom: process.env.NUXT_MAIL_FROM || '',
 
-    // Konfigurasi Sesi Open-Source (nuxt-auth-utils)
     session: {
-      password: process.env.NUXT_SESSION_PASSWORD || process.env.NUXT_APP_SECRET || '',
-      maxAge: 60 * 60 * 12, // Sesi berlaku 12 jam
+      maxAge: 60 * 60 * 12,
       cookie: {
         httpOnly: true,
         sameSite: 'lax',
