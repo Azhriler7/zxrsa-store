@@ -6,11 +6,11 @@
 -- 1. Seed Akun Admin Default
 -- Catatan: Password default di bawah adalah hash untuk "AdminZxrsa2026!" 
 -- (Nanti bisa diubah via script/dashboard)
-INSERT OR IGNORE INTO users (id, email, password_hash, role)
+INSERT OR REPLACE INTO users (id, email, password_hash, role)
 VALUES (
   'usr_admin_01',
   'admin@zxrsa.store',
-  'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f:8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
+  'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f:6168e238eb74f0e8ff4725a72cd3b7236f3bc78b4b5f03923eb08a18e2f94c65',
   'admin'
 );
 
