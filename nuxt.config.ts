@@ -2,7 +2,6 @@
 // FILE: nuxt.config.ts
 // DESKRIPSI: Konfigurasi Utama Nuxt 4, Nuxt UI, dan Cloudflare Workers Preset
 // ============================================================================
-// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
@@ -18,12 +17,26 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   runtimeConfig: {
-    // Private Keys (Hanya bisa diakses di server/)
+    // Kunci Rahasia Session Cookie (Wajib ada agar tidak Server Error 500 di Cloudflare)
+    appSecret: process.env.NUXT_APP_SECRET || '',
+
+    // Private Keys (Otomatis di-override oleh NUXT_* di Cloudflare Variables & Secrets)
     encryptionKey: process.env.NUXT_ENCRYPTION_KEY || '',
     qrisStaticString: process.env.NUXT_QRIS_STATIC_STRING || '',
     webhookHmacSecret: process.env.NUXT_WEBHOOK_HMAC_SECRET || '',
     mailApiKey: process.env.NUXT_MAIL_API_KEY || '',
     mailFrom: process.env.NUXT_MAIL_FROM || '',
+
+    // Konfigurasi Sesi Open-Source (nuxt-auth-utils)
+    session: {
+      password: process.env.NUXT_SESSION_PASSWORD || process.env.NUXT_APP_SECRET || '',
+      maxAge: 60 * 60 * 12, // Sesi berlaku 12 jam
+      cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NUXT_PUBLIC_MAIN_DOMAIN !== 'localhost:3000'
+      }
+    },
 
     // Public Keys (Bisa diakses di client & server)
     public: {
@@ -33,8 +46,15 @@ export default defineNuxtConfig({
     }
   },
 
+  // PENTING: Jangan gunakan prerender: true pada '/' agar jumlah stok & katalog selalu real-time dari D1
   routeRules: {
-    '/': { prerender: true }
+    '/**': {
+      headers: {
+        'X-Frame-Options': 'DENY',
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'strict-origin-when-cross-origin'
+      }
+    }
   },
 
   compatibilityDate: '2026-06-30',
