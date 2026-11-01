@@ -12,7 +12,7 @@ export default defineNuxtConfig({
   ],
 
   devtools: {
-    enabled: true
+    enabled: false
   },
 
   css: ['~/assets/css/main.css'],
@@ -38,6 +38,24 @@ export default defineNuxtConfig({
   },
 
   compatibilityDate: '2026-06-30',
+
+  nitro: {
+    preset: 'cloudflare_module',
+    experimental: {
+      tasks: true
+    }
+  },
+
+  vite: {
+    optimizeDeps: {
+      include: ['zod', 'qrcode', '@vueuse/core']
+    },
+    server: {
+      watch: {
+        ignored: ['**/.wrangler/**', '**/.data/**', '**/node_modules/**']
+      }
+    }
+  },
 
   eslint: {
     config: {
