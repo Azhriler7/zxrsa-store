@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { render } from '@vue-email/render'
-import InvoiceEmail from '../emails/InvoiceEmail.vue'
+import InvoiceEmail from '../emails/InvoiceEmail'
 
 export interface SendInvoiceEmailPayload {
   toEmail: string
@@ -55,10 +55,10 @@ export class EmailService {
       duration: payload.duration,
       totalAmountFormatted,
       isCustomGmail: payload.isCustomGmail,
-      customGmailTarget: payload.customGmailTarget,
-      accountEmail: payload.accountEmail,
-      accountPassword: payload.accountPassword,
-      accountExtraLink: payload.accountExtraLink,
+      customGmailTarget: payload.customGmailTarget ?? undefined,
+      accountEmail: payload.accountEmail ?? undefined,
+      accountPassword: payload.accountPassword ?? undefined,
+      accountExtraLink: payload.accountExtraLink ?? undefined,
       usageRules: payload.usageRules,
       invoiceUrl
     })
