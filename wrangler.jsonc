@@ -15,6 +15,18 @@
   "observability": {
     "enabled": true,
   },
+
+  "routes": [
+    {
+      "pattern": "zioravellune.my.id",
+      "custom_domain": true,
+    },
+    {
+      "pattern": "admin.zioravellune.my.id",
+      "custom_domain": true,
+    },
+  ],
+  
   "d1_databases": [
     {
       "binding": "DB",
