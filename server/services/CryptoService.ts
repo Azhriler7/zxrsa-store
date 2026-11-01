@@ -110,21 +110,31 @@ export class CryptoService {
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: PASSWORD VERIFICATION ADMIN]
-  // Memverifikasi password login Admin dengan format salt:sha256_hash di D1
+  // [SECTION: PASSWORD HASHING & VERIFICATION ADMIN]
+  // Satu pintu pembuatan & pengecekan hash agar tidak pernah beda algoritma
   // --------------------------------------------------------------------------
-  public static async verifyPassword(plainPassword: string, storedHash: string): Promise<boolean> {
-    const [salt, originalHash] = storedHash.split(':')
-    if (!salt || !originalHash) return false
+  public static async hashPassword(plainPassword: string, customSalt?: string): Promise<string> {
+    const salt = (customSalt || crypto.randomUUID().replace(/-/g, '')).trim()
+    const cleanPass = plainPassword.trim()
 
     const encoder = new TextEncoder()
-    const data = encoder.encode(`${salt}:${plainPassword}`)
+    const data = encoder.encode(`${salt}:${cleanPass}`)
     const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-    const computedHash = Array.from(new Uint8Array(hashBuffer))
+    const hashHex = Array.from(new Uint8Array(hashBuffer))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('')
 
-    return computedHash === originalHash
+    return `${salt}:${hashHex}`
+  }
+
+  public static async verifyPassword(plainPassword: string, storedHash: string): Promise<boolean> {
+    const [salt, originalHash] = storedHash.trim().split(':')
+    if (!salt || !originalHash) return false
+
+    const expectedFullHash = await CryptoService.hashPassword(plainPassword, salt)
+    const computedHash = expectedFullHash.split(':')[1] || ''
+
+    return computedHash === originalHash.trim().toLowerCase()
   }
 
   // --------------------------------------------------------------------------
