@@ -1,12 +1,12 @@
 # ============================================================================
 # FILE: .github/workflows/ci-cd.yml
-# DESKRIPSI: Pipeline CI (Validasi Branch/PR) & CD (Auto Deploy ke Cloudflare)
+# DESKRIPSI: Pipeline CI (Lint, Typecheck & Build Test di GitHub Actions)
+#            Catatan: Proses CD (Deploy) ditangani oleh Cloudflare Worker Builds
 # ============================================================================
 
-name: ZXRSA Store CI/CD Pipeline
+name: ZXRSA Store CI Quality Check
 
 on:
-  # Jalankan pengecekan kualitas kode di semua Pull Request dan branch feature/*
   pull_request:
     branches: [main]
   push:
@@ -22,10 +22,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ==========================================================================
-  # JOB 1: CONTINUOUS INTEGRATION (Lint, Typecheck & Build Verification)
-  # Berjalan di setiap branch baru untuk memastikan tidak ada kode rusak
-  # ==========================================================================
   quality-check:
     name: 🔍 Lint, Typecheck & Build Test
     runs-on: ubuntu-latest
@@ -52,47 +48,5 @@ jobs:
           npx nuxt prepare
           npm run typecheck
 
-      - name: 🏗️ Test Production Build
+      - name: 🏗️ Verify Production Build
         run: npm run build
-
-  # ==========================================================================
-  # JOB 2: CONTINUOUS DEPLOYMENT (Migrate Cloudflare D1 & Deploy Worker)
-  # HANYA berjalan jika kode sudah di-merge/push ke branch 'main'
-  # ==========================================================================
-  deploy-production:
-    name: 🚀 Migrate D1 & Deploy to Cloudflare Workers
-    needs: quality-check
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: 🟢 Setup Node.js v24.21.0
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24.21.0'
-          cache: 'npm'
-
-      - name: 📦 Clean Install Dependencies
-        run: npm ci
-
-      - name: 🗄️ Apply Cloudflare D1 Migrations (Remote Production)
-        run: npm run db:migrate:prod
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: 🏗️ Build Nuxt for Cloudflare Workers
-        run: npm run build
-        env:
-          NODE_ENV: production
-
-      - name: ☁️ Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
