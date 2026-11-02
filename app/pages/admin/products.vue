@@ -1,6 +1,7 @@
 <!-- ==========================================================================
  FILE: app/pages/admin/products.vue
- DESKRIPSI: Halaman Admin CRUD Produk, Varian Paket, & Peringatan Hapus Stok
+ DESKRIPSI: Halaman Admin CRUD Produk (dengan Icon AppIconImage + USkeleton)
+            & Pengaturan Jadwal Promo Lengkap.
 =========================================================================== -->
 <script setup lang="ts">
 import type { ProductFormInitialData } from '~/components/admin/ProductFormModal.vue'
@@ -28,6 +29,24 @@ const isDeleteDialogOpen = ref(false)
 const deleteTarget = ref<{ type: 'product' | 'variant', id: string, name: string } | null>(null)
 const isDeleting = ref(false)
 
+const dayNamesMap: Record<string, string> = {
+  0: 'Minggu',
+  1: 'Senin',
+  2: 'Selasa',
+  3: 'Rabu',
+  4: 'Kamis',
+  5: 'Jumat',
+  6: 'Sabtu'
+}
+
+function formatDayList(dayCsv: string | null) {
+  if (!dayCsv) return ''
+  return dayCsv
+    .split(',')
+    .map(d => dayNamesMap[d.trim()] || d)
+    .join(', ')
+}
+
 function openAddProduct() {
   selectedProduct.value = null
   isProductModalOpen.value = true
@@ -38,6 +57,7 @@ function openEditProduct(prod: {
   name: string
   description: string | null
   usage_rules: string
+  image_url: string | null
   promo_badge: string | null
   is_active: 0 | 1
 }) {
@@ -56,6 +76,8 @@ function openAddVariant(productId: string, productName: string) {
     duration: '30 Hari',
     price: 20000,
     promo_price: null,
+    promo_day_of_week: null,
+    promo_specific_date: null,
     promo_start_at: null,
     promo_end_at: null,
     is_custom_gmail: false,
@@ -71,6 +93,8 @@ function openEditVariant(productName: string, v: {
   duration: string
   price: number
   promo_price: number | null
+  promo_day_of_week: string | null
+  promo_specific_date: string | null
   promo_start_at: string | null
   promo_end_at: string | null
   is_custom_gmail: 0 | 1
@@ -85,10 +109,6 @@ function openEditVariant(productName: string, v: {
   isVariantModalOpen.value = true
 }
 
-// ----------------------------------------------------------------------------
-// [SECTION: CEK STOK SEBELUM MEMUNCULKAN DIALOG HAPUS]
-// Memberi pemberitahuan langsung jika produk/paket masih punya stok > 0
-// ----------------------------------------------------------------------------
 function promptDeleteProduct(prod: {
   id: string
   name: string
@@ -145,8 +165,7 @@ async function confirmDelete() {
     toast.add({
       title: 'Gagal Menghapus',
       description: msg,
-      color: 'error',
-      icon: 'i-lucide-triangle-alert'
+      color: 'error'
     })
   } finally {
     isDeleting.value = false
@@ -166,7 +185,7 @@ function formatRupiah(val: number) {
           Manajemen Produk, Paket & Waktu Promo
         </h1>
         <p class="text-sm text-muted">
-          Kelola aplikasi premium, aturan garansi, dan harga promo kapan saja. (Pastikan stok sudah 0 sebelum menghapus produk/paket).
+          Kelola aplikasi premium beserta icon dari GitHub CDN, aturan garansi, dan jadwal promo harian/tanggal.
         </p>
       </div>
 
@@ -178,7 +197,6 @@ function formatRupiah(val: number) {
       />
     </div>
 
-    <!-- EMPTY STATE JIKA SEMUA PRODUK DIHAPUS -->
     <UCard
       v-if="!data?.products?.length"
       class="text-center py-10"
@@ -188,7 +206,6 @@ function formatRupiah(val: number) {
       </p>
     </UCard>
 
-    <!-- DAFTAR PRODUK & TABEL VARIAN PAKET -->
     <div
       v-else
       class="space-y-6"
@@ -199,30 +216,40 @@ function formatRupiah(val: number) {
       >
         <template #header>
           <div class="flex flex-wrap items-center justify-between gap-4">
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
-                <h2 class="text-lg font-bold text-highlighted">
-                  {{ prod.name }}
-                </h2>
-                <UBadge
-                  v-if="prod.promo_badge"
-                  color="warning"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ prod.promo_badge }}
-                </UBadge>
-                <UBadge
-                  :color="prod.is_active ? 'success' : 'neutral'"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ prod.is_active ? 'Aktif' : 'Nonaktif' }}
-                </UBadge>
+            <div class="flex items-center gap-3">
+              <!-- LEGO ICON APLIKASI DENGAN USKELETON PULSE & DEFAULT PLACEHOLDER -->
+              <CommonAppIconImage
+                :src="prod.image_url"
+                :alt="prod.name"
+                size-class="w-11 h-11"
+                rounded-class="rounded-xl"
+              />
+
+              <div class="space-y-0.5">
+                <div class="flex items-center gap-2">
+                  <h2 class="text-lg font-bold text-highlighted">
+                    {{ prod.name }}
+                  </h2>
+                  <UBadge
+                    v-if="prod.promo_badge"
+                    color="warning"
+                    variant="subtle"
+                    size="sm"
+                  >
+                    {{ prod.promo_badge }}
+                  </UBadge>
+                  <UBadge
+                    :color="prod.is_active ? 'success' : 'neutral'"
+                    variant="subtle"
+                    size="sm"
+                  >
+                    {{ prod.is_active ? 'Aktif' : 'Nonaktif' }}
+                  </UBadge>
+                </div>
+                <p class="text-xs text-muted">
+                  {{ prod.description || 'Tanpa deskripsi tambahan' }}
+                </p>
               </div>
-              <p class="text-xs text-muted">
-                {{ prod.description || 'Tanpa deskripsi tambahan' }}
-              </p>
             </div>
 
             <div class="flex items-center gap-2">
@@ -279,7 +306,7 @@ function formatRupiah(val: number) {
                   Harga Normal
                 </th>
                 <th class="py-2 px-3">
-                  Harga Promo & Jadwal
+                  Harga Promo & Jadwal Aktif
                 </th>
                 <th class="py-2 px-3">
                   Tipe
@@ -309,20 +336,40 @@ function formatRupiah(val: number) {
                 <td class="py-2.5 px-3">
                   <div
                     v-if="v.promo_price"
-                    class="space-y-0.5"
+                    class="space-y-0.5 text-xs"
                   >
-                    <span class="font-mono font-bold text-success">{{ formatRupiah(v.promo_price) }}</span>
-                    <p
-                      v-if="v.promo_start_at || v.promo_end_at"
-                      class="text-xs text-muted"
+                    <span class="font-mono font-bold text-sm text-success block">
+                      {{ formatRupiah(v.promo_price) }}
+                    </span>
+                    <span
+                      v-if="v.promo_day_of_week"
+                      class="text-primary block"
                     >
-                      {{ v.promo_start_at || 'Sekarang' }} s/d {{ v.promo_end_at || 'Selamanya' }}
-                    </p>
+                      • Tiap Hari: {{ formatDayList(v.promo_day_of_week) }}
+                    </span>
+                    <span
+                      v-if="v.promo_specific_date"
+                      class="text-warning block"
+                    >
+                      • Tgl Spesifik: {{ v.promo_specific_date }}
+                    </span>
+                    <span
+                      v-if="v.promo_start_at || v.promo_end_at"
+                      class="text-muted block"
+                    >
+                      • Rentang: {{ v.promo_start_at || 'Sekarang' }} s/d {{ v.promo_end_at || 'Selamanya' }}
+                    </span>
+                    <span
+                      v-if="!v.promo_day_of_week && !v.promo_specific_date && !v.promo_start_at && !v.promo_end_at"
+                      class="text-success/80 block"
+                    >
+                      • Aktif Setiap Saat
+                    </span>
                   </div>
                   <span
                     v-else
                     class="text-xs text-muted"
-                  >-</span>
+                  >OFF (Harga Normal)</span>
                 </td>
                 <td class="py-2.5 px-3">
                   <UBadge

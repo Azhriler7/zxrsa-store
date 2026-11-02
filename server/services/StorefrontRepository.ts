@@ -1,8 +1,7 @@
 // ============================================================================
 // FILE: server/services/StorefrontRepository.ts
-// DESKRIPSI: Repository OOP untuk Katalog Publik, Kalkulasi Promo Aktif,
-//            Atomic Stock Locking (Anti-Race Condition), Dynamic Invoice,
-//            dan Validasi Webhook Mutasi QRIS (HMAC-SHA256).
+// DESKRIPSI: Repository OOP untuk Katalog Publik (dengan Icon Produk & Jadwal
+//            Promo Multi-Mode), Atomic Stock Locking, & Dynamic Invoice.
 // ============================================================================
 
 import type { DbProduct, DbProductVariant, TransactionStatus } from '../types/database'
@@ -31,16 +30,12 @@ export interface PublicProductCatalog {
   slug: string
   description: string | null
   usage_rules: string
+  image_url: string | null
   promo_badge: string | null
   variants: PublicVariantItem[]
 }
 
 export class StorefrontRepository extends BaseRepository {
-  // --------------------------------------------------------------------------
-  // [SECTION: AUTO-RELEASE EXPIRED RESERVED STOCKS]
-  // Melepaskan kembali stok yang dikunci >10 menit karena belum dibayar
-  // dan mengubah status transaksinya menjadi 'expired'.
-  // --------------------------------------------------------------------------
   public async releaseExpiredLocks(): Promise<void> {
     await this.db
       .prepare(
@@ -63,31 +58,61 @@ export class StorefrontRepository extends BaseRepository {
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: CEK APAKAH JADWAL PROMO SEDANG AKTIF]
+  // [SECTION: CEK JADWAL PROMO (HARIAN BERULANG / TANGGAL SPESIFIK / RENTANG)]
+  // Menggunakan zona waktu WIB (UTC+7) agar akurat dengan waktu Indonesia
   // --------------------------------------------------------------------------
   private isPromoCurrentlyActive(variant: DbProductVariant): boolean {
     if (!variant.promo_price || variant.promo_price <= 0 || variant.promo_price >= variant.price) {
       return false
     }
 
-    const now = new Date()
+    const nowUtc = new Date()
+    // Konversi ke waktu WIB (UTC+7) untuk pengecekan hari & tanggal lokal Indonesia
+    const wibDate = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000)
+    const currentDayIndex = String(wibDate.getUTCDay()) // '0' (Minggu) s/d '6' (Sabtu)
+    const currentYmd = wibDate.toISOString().slice(0, 10) // 'YYYY-MM-DD'
+    const currentMonthDay = currentYmd.slice(5, 10) // 'MM-DD' (misal '08-01' untuk 1 Agustus)
 
-    if (variant.promo_start_at) {
-      const start = new Date(variant.promo_start_at)
-      if (now < start) return false
+    const hasRecurringDayRule = Boolean(variant.promo_day_of_week && variant.promo_day_of_week.trim() !== '')
+    const hasSpecificDateRule = Boolean(variant.promo_specific_date && variant.promo_specific_date.trim() !== '')
+    const hasRangeRule = Boolean(variant.promo_start_at || variant.promo_end_at)
+
+    // Jika Admin menyalakan Harga Promo tanpa membatasi hari/tanggal, berarti promo menyala terus
+    if (!hasRecurringDayRule && !hasSpecificDateRule && !hasRangeRule) {
+      return true
     }
 
-    if (variant.promo_end_at) {
-      const end = new Date(variant.promo_end_at)
-      if (now > end) return false
+    // Jika ada salah satu jadwal yang dinyalakan, cek apakah hari/jam sekarang memenuhi salah satu jadwal yang aktif:
+    let matchedAnyActiveSchedule = false
+
+    // 1. Cek Promo Harian Berulang (misal '5' untuk Jumat, atau '0,5,6' untuk Minggu, Jumat, Sabtu)
+    if (hasRecurringDayRule) {
+      const activeDays = (variant.promo_day_of_week || '').split(',').map(d => d.trim())
+      if (activeDays.includes(currentDayIndex)) {
+        matchedAnyActiveSchedule = true
+      }
     }
 
-    return true
+    // 2. Cek Promo Tanggal Spesifik (bisa format 'YYYY-MM-DD' atau 'MM-DD' seperti 1 Agustus)
+    if (hasSpecificDateRule) {
+      const targetDate = (variant.promo_specific_date || '').trim()
+      if (targetDate === currentYmd || targetDate.slice(-5) === currentMonthDay) {
+        matchedAnyActiveSchedule = true
+      }
+    }
+
+    // 3. Cek Promo Rentang Tanggal/Waktu (Start s/d End)
+    if (hasRangeRule) {
+      const afterStart = variant.promo_start_at ? nowUtc >= new Date(variant.promo_start_at) : true
+      const beforeEnd = variant.promo_end_at ? nowUtc <= new Date(variant.promo_end_at) : true
+      if (afterStart && beforeEnd) {
+        matchedAnyActiveSchedule = true
+      }
+    }
+
+    return matchedAnyActiveSchedule
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: GET ACTIVE PUBLIC CATALOG]
-  // --------------------------------------------------------------------------
   public async getPublicCatalog(): Promise<PublicProductCatalog[]> {
     await this.releaseExpiredLocks()
 
@@ -108,14 +133,15 @@ export class StorefrontRepository extends BaseRepository {
       )
       .all<DbProductVariant & { available_stock: number }>()
 
-    return products.map(prod => ({
+    return (products || []).map(prod => ({
       id: prod.id,
       name: prod.name,
       slug: prod.slug,
       description: prod.description,
       usage_rules: prod.usage_rules,
+      image_url: prod.image_url,
       promo_badge: prod.promo_badge,
-      variants: variants
+      variants: (variants || [])
         .filter(v => v.product_id === prod.id)
         .map((v) => {
           const promoActive = this.isPromoCurrentlyActive(v)
@@ -134,10 +160,6 @@ export class StorefrontRepository extends BaseRepository {
     }))
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: CREATE CHECKOUT INVOICE & ATOMIC STOCK LOCK (10 MENIT)]
-  // Mencegah 2 pembeli mendapatkan 1 akun yang sama di milidetik yang sama!
-  // --------------------------------------------------------------------------
   public async createCheckoutInvoice(payload: {
     variantId: string
     customerEmail: string
@@ -168,13 +190,11 @@ export class StorefrontRepository extends BaseRepository {
       })
     }
 
-    // Waktu kedaluwarsa QRIS: 10 menit dari sekarang
     const expiresDate = new Date(Date.now() + 10 * 60 * 1000)
     const expiresIso = expiresDate.toISOString()
 
     let lockedStockId: number | null = null
 
-    // ATOMIC SINGLE-STATEMENT UPDATE ... RETURNING (Anti-Race Condition)
     if (!isCustomGmail) {
       const lockedStock = await this.db
         .prepare(
@@ -202,13 +222,11 @@ export class StorefrontRepository extends BaseRepository {
       lockedStockId = lockedStock.id
     }
 
-    // Hitung harga efektif + Kode Unik QRIS (1 s/d 299)
     const promoActive = this.isPromoCurrentlyActive(variant)
     const baseAmount = promoActive && variant.promo_price ? variant.promo_price : variant.price
     const uniqueCode = QrisDynamicService.generateUniqueCode(1, 299)
     const totalAmount = baseAmount + uniqueCode
 
-    // Generate String QRIS Dinamis
     const config = useRuntimeConfig(this.event)
     let qrisDynamicString = `00020101021226580014ID.CO.QRIS.WWW01189360091431234567890215ID10200211123450303UMI51440014ID.CO.QRIS.WWW0215ID10200211123450303UMI52045499530336054${totalAmount.toString().length.toString().padStart(2, '0')}${totalAmount}5802ID5911ZXRSA STORE6007JAKARTA6304ABCD`
 
@@ -247,19 +265,9 @@ export class StorefrontRepository extends BaseRepository {
       )
       .run()
 
-    await this.writeSystemLog('info', 'INVOICE_CREATE', `Invoice baru dibuat: ${invoiceId}`, {
-      invoiceId,
-      totalAmount,
-      customerEmail: payload.customerEmail
-    })
-
     return { invoiceId, invoiceToken }
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: GET PUBLIC INVOICE DETAIL BY CRYPTO TOKEN]
-  // Hanya mendekripsi kredensial akun jika status === 'lunas'
-  // --------------------------------------------------------------------------
   public async getInvoiceByToken(token: string) {
     await this.releaseExpiredLocks()
 
@@ -335,10 +343,6 @@ export class StorefrontRepository extends BaseRepository {
     }
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: PROCESS QRIS WEBHOOK MUTATION]
-  // Mencocokkan nominal uang masuk (total_amount) dengan transaksi 'pending'
-  // --------------------------------------------------------------------------
   public async processQrisWebhookMutation(amountPaid: number, externalRefId: string): Promise<string> {
     await this.releaseExpiredLocks()
 
@@ -360,17 +364,12 @@ export class StorefrontRepository extends BaseRepository {
       .first<AdminTransactionRow & { delivered_account_data: string | null }>()
 
     if (!matchedTx) {
-      await this.writeSystemLog('warn', 'WEBHOOK_QRIS', `Mutasi Rp ${amountPaid} diterima namun tidak ada Invoice pending yang cocok`, {
-        amountPaid,
-        externalRefId
-      })
       throw createError({
         statusCode: 404,
         statusMessage: 'Tidak ada transaksi pending yang cocok dengan nominal tersebut.'
       })
     }
 
-    // Simpan payment_gateway_ref untuk mencegah Replay Attack (Double Webhook)
     await this.db
       .prepare('UPDATE transactions SET payment_gateway_ref = ?1 WHERE id = ?2')
       .bind(externalRefId, matchedTx.id)

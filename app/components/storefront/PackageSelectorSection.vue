@@ -1,6 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/PackageSelectorSection.vue
- DESKRIPSI: Komponen Lego Pilih Paket, Form Input Gmail Pembeli, & Tombol Bayar
+ DESKRIPSI: Komponen Lego Pilih Paket (Menampilkan Icon Aplikasi dengan
+            USkeleton Berdenyut & Default Placeholder Otomatis).
 =========================================================================== -->
 <script setup lang="ts">
 import { z } from 'zod'
@@ -13,7 +14,6 @@ const props = defineProps<{
 
 const toast = useToast()
 
-// State Produk & Paket yang sedang diklik pembeli
 const selectedProductId = ref<string>(props.catalog[0]?.id || '')
 const selectedVariant = ref<PublicVariantItem | null>(null)
 
@@ -39,7 +39,6 @@ function selectVariantCard(variant: PublicVariantItem) {
   selectedVariant.value = variant
 }
 
-// Skema Validasi Form Pembeli (Validation Bubble Nuxt UI)
 const checkoutFormSchema = z.object({
   customer_email: z
     .string()
@@ -76,9 +75,6 @@ function onFormValidatedSubmit(_event: FormSubmitEvent<CheckoutSchema>) {
   isConfirmCheckoutOpen.value = true
 }
 
-// ----------------------------------------------------------------------------
-// [SECTION: EKSEKUSI CHECKOUT & REDIRECT KE DYNAMIC INVOICE PAGE]
-// ----------------------------------------------------------------------------
 async function handleProceedToPayment() {
   if (!selectedVariant.value) return
   isCreatingInvoice.value = true
@@ -141,31 +137,38 @@ function formatRupiah(val: number) {
         </p>
       </div>
 
-      <!-- STEP 1: TAB PILIH APLIKASI PREMIUM -->
-      <div class="flex flex-wrap items-center justify-center gap-2.5">
-        <UButton
+      <!-- STEP 1: TAB PILIH APLIKASI DENGAN USKELETON PULSE & DEFAULT ICON -->
+      <div class="flex flex-wrap items-center justify-center gap-3">
+        <button
           v-for="prod in catalog"
           :key="prod.id"
-          size="lg"
-          :color="selectedProductId === prod.id ? 'primary' : 'neutral'"
-          :variant="selectedProductId === prod.id ? 'solid' : 'subtle'"
-          icon="i-lucide-layers"
-          :label="prod.name"
+          type="button"
+          class="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all cursor-pointer focus:outline-none"
+          :class="
+            selectedProductId === prod.id
+              ? 'bg-primary text-white border-primary shadow-md scale-[1.02]'
+              : 'bg-elevated/60 text-highlighted border-default hover:border-primary/50'
+          "
           @click="selectProduct(prod.id)"
         >
-          <template
+          <CommonAppIconImage
+            :src="prod.image_url"
+            :alt="prod.name"
+            size-class="w-7 h-7"
+            rounded-class="rounded-lg"
+          />
+
+          <span>{{ prod.name }}</span>
+
+          <UBadge
             v-if="prod.promo_badge"
-            #trailing
+            color="warning"
+            size="xs"
+            variant="solid"
           >
-            <UBadge
-              color="warning"
-              size="xs"
-              variant="solid"
-            >
-              {{ prod.promo_badge }}
-            </UBadge>
-          </template>
-        </UButton>
+            {{ prod.promo_badge }}
+          </UBadge>
+        </button>
       </div>
 
       <!-- STEP 2: GRID KARTU PAKET DARI APLIKASI TERPILIH -->
@@ -188,17 +191,25 @@ function formatRupiah(val: number) {
           >
             <div class="space-y-4">
               <div class="flex items-start justify-between gap-2">
-                <div>
-                  <h3 class="font-bold text-base text-highlighted">
-                    {{ variant.name }}
-                  </h3>
-                  <span class="text-xs text-muted flex items-center gap-1 mt-0.5">
-                    <UIcon
-                      name="i-lucide-clock"
-                      class="w-3.5 h-3.5"
-                    />
-                    Durasi: {{ variant.duration }}
-                  </span>
+                <div class="flex items-center gap-2.5">
+                  <CommonAppIconImage
+                    :src="currentProduct.image_url"
+                    :alt="currentProduct.name"
+                    size-class="w-10 h-10"
+                    rounded-class="rounded-xl"
+                  />
+                  <div>
+                    <h3 class="font-bold text-base text-highlighted">
+                      {{ variant.name }}
+                    </h3>
+                    <span class="text-xs text-muted flex items-center gap-1 mt-0.5">
+                      <UIcon
+                        name="i-lucide-clock"
+                        class="w-3.5 h-3.5"
+                      />
+                      Durasi: {{ variant.duration }}
+                    </span>
+                  </div>
                 </div>
 
                 <UBadge
@@ -210,7 +221,6 @@ function formatRupiah(val: number) {
                 </UBadge>
               </div>
 
-              <!-- HARGA & CORET HARGA PROMO -->
               <div class="pt-2 border-t border-default flex items-baseline justify-between">
                 <div>
                   <div
@@ -234,7 +244,7 @@ function formatRupiah(val: number) {
           </UCard>
         </div>
 
-        <!-- STEP 3: FORM INPUT GMAIL & TOMBOL MENUJU PAGE BAYAR (MUNCUL SETELAH KLIK CARD PAKET) -->
+        <!-- STEP 3: FORM INPUT GMAIL PEMBELI -->
         <UCard
           v-if="selectedVariant"
           class="max-w-2xl mx-auto border-2 border-primary/40 shadow-xl"
@@ -285,7 +295,6 @@ function formatRupiah(val: number) {
               />
             </UFormField>
 
-            <!-- INPUT TAMBAHAN KHUSUS PAKET CUSTOM GMAIL -->
             <UFormField
               v-if="selectedVariant.is_custom_gmail"
               label="Alamat Gmail yang Ingin Dijadikan Premium (Custom Gmail)"
@@ -329,7 +338,6 @@ function formatRupiah(val: number) {
         </UCard>
       </div>
 
-      <!-- DIALOG KONFIRMASI SEBELUM GENERATE QRIS & KUNCI STOK -->
       <CommonConfirmDialog
         v-model:open="isConfirmCheckoutOpen"
         title="Konfirmasi Pemesanan & Kunci Stok"

@@ -40,7 +40,9 @@ export default defineNuxtConfig({
     public: {
       mainDomain: process.env.NUXT_PUBLIC_MAIN_DOMAIN || 'localhost:3000',
       adminDomain: process.env.NUXT_PUBLIC_ADMIN_DOMAIN || 'admin.localhost:3000',
-      whatsappNumber: process.env.NUXT_PUBLIC_WHATSAPP_NUMBER || '6281234567890'
+      whatsappNumber: process.env.NUXT_PUBLIC_WHATSAPP_NUMBER || '6281234567890',
+      githubIconRepo: process.env.NUXT_PUBLIC_GITHUB_ICON_REPO || 'Azhriler7/Azhriler7-my-public-assets',
+      githubIconFolder: process.env.NUXT_PUBLIC_GITHUB_ICON_FOLDER || 'zxrsa-store-asset'
     }
   },
 

@@ -1,7 +1,6 @@
 <!-- ==========================================================================
  FILE: app/components/invoice/CredentialDeliverCard.vue
- DESKRIPSI: Komponen Lego Kotak Detail Akun (Paket Biasa) & Info Progress
-            Admin (Paket Custom Gmail) saat Invoice berstatus LUNAS.
+ DESKRIPSI: Komponen Lego Kotak Detail Akun (Email & Password Bersih)
 =========================================================================== -->
 <script setup lang="ts">
 defineProps<{
@@ -40,7 +39,6 @@ async function copyText(label: string, value: string) {
       </div>
     </template>
 
-    <!-- JIKA PAKET CUSTOM GMAIL -->
     <div
       v-if="isCustomGmail"
       class="space-y-3 text-sm"
@@ -78,7 +76,6 @@ async function copyText(label: string, value: string) {
       </div>
     </div>
 
-    <!-- JIKA PAKET BIASA (STOK .TXT OTOMATIS) -->
     <div
       v-else-if="deliveredAccount"
       class="space-y-3"
@@ -114,31 +111,6 @@ async function copyText(label: string, value: string) {
           icon="i-lucide-copy"
           label="Salin Sandi"
           @click="copyText('Password', deliveredAccount.password)"
-        />
-      </div>
-
-      <div
-        v-if="deliveredAccount.extraInfoLink"
-        class="p-3 rounded-lg bg-default border border-default flex items-center justify-between gap-2"
-      >
-        <div class="font-mono text-xs truncate">
-          <span class="text-muted block">Link Akses OTP / Inbox Generator:</span>
-          <a
-            :href="deliveredAccount.extraInfoLink"
-            target="_blank"
-            class="text-primary underline"
-          >
-            {{ deliveredAccount.extraInfoLink }}
-          </a>
-        </div>
-        <UButton
-          size="xs"
-          color="neutral"
-          variant="subtle"
-          icon="i-lucide-external-link"
-          label="Buka Link"
-          :to="deliveredAccount.extraInfoLink"
-          target="_blank"
         />
       </div>
     </div>
