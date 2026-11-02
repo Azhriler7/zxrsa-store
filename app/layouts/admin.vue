@@ -14,9 +14,11 @@ const isLoggingOut = ref(false)
 const navItems = [
   { label: 'Dashboard & Log', icon: 'i-lucide-layout-dashboard', to: '/admin' },
   { label: 'Produk, Paket & Promo', icon: 'i-lucide-package', to: '/admin/products' },
-  { label: 'Input Stok (.txt)', icon: 'i-lucide-file-Spreadsheet', to: '/admin/stocks' },
+  { label: 'Input Stok (.txt)', icon: 'i-lucide-file-spreadsheet', to: '/admin/stocks' },
   { label: 'Antrean Custom Gmail', icon: 'i-lucide-mail-check', to: '/admin/custom-gmail' },
-  { label: 'CRUD Invoice & History', icon: 'i-lucide-receipt-text', to: '/admin/invoices' }
+  { label: 'CRUD Invoice & History', icon: 'i-lucide-receipt-text', to: '/admin/invoices' },
+  { label: 'CRUD Testimoni & Rating', icon: 'i-lucide-message-square-quote', to: '/admin/testimonials' },
+  { label: 'CRUD FAQ', icon: 'i-lucide-circle-help', to: '/admin/faqs' }
 ]
 
 // ----------------------------------------------------------------------------

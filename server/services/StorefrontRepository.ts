@@ -306,6 +306,11 @@ export class StorefrontRepository extends BaseRepository {
       }
     }
 
+    const reviewRow = await this.db
+      .prepare('SELECT id FROM testimonials WHERE transaction_id = ?1 LIMIT 1')
+      .bind(tx.id)
+      .first<{ id: string }>()
+
     return {
       id: tx.id,
       invoice_token: tx.invoice_token,
@@ -325,7 +330,8 @@ export class StorefrontRepository extends BaseRepository {
       expires_at: tx.expires_at,
       paid_at: tx.paid_at,
       created_at: tx.created_at,
-      delivered_account: decryptedAccount
+      delivered_account: decryptedAccount,
+      has_reviewed: Boolean(reviewRow)
     }
   }
 

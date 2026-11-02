@@ -116,3 +116,26 @@ export interface DbSystemLog {
   ip_address: string | null
   created_at: string
 }
+
+export interface DbTestimonial {
+  id: string
+  transaction_id: string | null
+  customer_email: string
+  masked_email: string
+  product_package_name: string
+  rating: number
+  comment: string
+  is_approved: 0 | 1
+  source: 'customer' | 'admin'
+  created_at: string
+}
+
+export interface DbFaq {
+  id: string
+  question: string
+  answer: string
+  sort_order: number
+  is_active: 0 | 1
+  created_at: string
+  updated_at: string
+}
