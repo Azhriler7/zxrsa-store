@@ -1,6 +1,6 @@
 <!-- ==========================================================================
  FILE: app/components/admin/ProductFormModal.vue
- DESKRIPSI: Komponen Lego Modal Form CRUD Produk Aplikasi & Aturan Pakai
+ DESKRIPSI: Komponen Lego Modal Form CRUD Produk Aplikasi (Slug Otomatis)
 =========================================================================== -->
 <script setup lang="ts">
 import { z } from 'zod'
@@ -9,7 +9,6 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 export interface ProductFormInitialData {
   id?: string
   name: string
-  slug: string
   description: string | null
   usage_rules: string
   image_url?: string | null
@@ -27,7 +26,6 @@ const toast = useToast()
 
 const schema = z.object({
   name: z.string().min(2, 'Nama aplikasi wajib diisi'),
-  slug: z.string().min(2, 'Slug URL wajib diisi'),
   description: z.string().optional(),
   usage_rules: z.string().min(5, 'Aturan pemakaian wajib diisi untuk ditampilkan di Invoice'),
   promo_badge: z.string().optional(),
@@ -38,27 +36,23 @@ type Schema = z.output<typeof schema>
 
 const state = reactive<Schema>({
   name: '',
-  slug: '',
   description: '',
   usage_rules: '1. Dilarang mengubah password atau profil akun.\n2. Gunakan sesuai batas perangkat yang ditentukan.\n3. Melanggar aturan akan menghanguskan garansi.',
   promo_badge: '',
   is_active: true
 })
 
-// Otomatis isi form saat mode Edit dibuka
 watch(
   () => [props.initialData, isOpen.value],
   () => {
     if (props.initialData) {
       state.name = props.initialData.name
-      state.slug = props.initialData.slug
       state.description = props.initialData.description || ''
       state.usage_rules = props.initialData.usage_rules
       state.promo_badge = props.initialData.promo_badge || ''
       state.is_active = props.initialData.is_active
     } else {
       state.name = ''
-      state.slug = ''
       state.description = ''
       state.usage_rules = '1. Dilarang mengubah password atau profil akun.\n2. Gunakan sesuai batas perangkat yang ditentukan.\n3. Melanggar aturan akan menghanguskan garansi.'
       state.promo_badge = ''
@@ -67,16 +61,6 @@ watch(
   },
   { immediate: true }
 )
-
-// Auto-generate slug saat mengetik nama produk baru
-function handleNameInput() {
-  if (!props.initialData?.id) {
-    state.slug = state.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '')
-  }
-}
 
 const isSaving = ref(false)
 
@@ -93,7 +77,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
     toast.add({
       title: 'Produk Tersimpan',
-      description: `Aplikasi ${event.data.name} berhasil diperbarui.`,
+      description: `Aplikasi ${event.data.name} berhasil disimpan.`,
       color: 'success',
       icon: 'i-lucide-check-circle'
     })
@@ -132,33 +116,20 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
               v-model="state.name"
               placeholder="Contoh: Alight Motion Pro"
               class="w-full"
-              @input="handleNameInput"
             />
           </UFormField>
 
           <UFormField
-            label="Slug Identifier"
-            name="slug"
-            required
+            label="Label Badge Promo (Opsional)"
+            name="promo_badge"
           >
             <UInput
-              v-model="state.slug"
-              placeholder="alight-motion-pro"
+              v-model="state.promo_badge"
+              placeholder="Contoh: BEST SELLER / HOT PROMO"
               class="w-full"
             />
           </UFormField>
         </div>
-
-        <UFormField
-          label="Label Badge Promo (Opsional)"
-          name="promo_badge"
-        >
-          <UInput
-            v-model="state.promo_badge"
-            placeholder="Contoh: BEST SELLER / HOT PROMO"
-            class="w-full"
-          />
-        </UFormField>
 
         <UFormField
           label="Deskripsi Singkat"
