@@ -1,7 +1,6 @@
 <!-- ==========================================================================
  FILE: app/pages/invoice/[token].vue
- DESKRIPSI: Halaman Dynamic Invoice Pembeli (UUID v4 + Crypto Token URL)
-            Dilengkapi QRIS Dinamis, Timer 10 Menit, Auto-Polling, & Aturan Akun
+ DESKRIPSI: Halaman Dynamic Invoice Pembeli + Pop-Up Rating Otomatis Saat Lunas
 =========================================================================== -->
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
@@ -16,7 +15,19 @@ useSeoMeta({
   robots: 'noindex, nofollow'
 })
 
-// Auto-polling cek status lunas setiap 4 detik selama status masih 'pending'
+const isReviewPopupOpen = ref(false)
+
+// Otomatis buka pop-up beri bintang & ulasan begitu status menjadi LUNAS
+watch(
+  () => [data.value?.invoice.status, data.value?.invoice.has_reviewed],
+  ([status, hasReviewed]) => {
+    if (status === 'lunas' && !hasReviewed) {
+      isReviewPopupOpen.value = true
+    }
+  },
+  { immediate: true }
+)
+
 const { pause } = useIntervalFn(async () => {
   if (data.value?.invoice.status === 'pending') {
     await refresh()
@@ -39,7 +50,6 @@ function formatRupiah(val: number) {
         v-if="data?.invoice"
         class="max-w-4xl space-y-6"
       >
-        <!-- HEADER INVOICE & STATUS BAYAR -->
         <UCard>
           <div class="flex flex-wrap items-center justify-between gap-4">
             <div class="space-y-1">
@@ -54,19 +64,29 @@ function formatRupiah(val: number) {
               </p>
             </div>
 
-            <UButton
-              icon="i-lucide-refresh-cw"
-              color="neutral"
-              variant="subtle"
-              size="sm"
-              label="Cek Status Pembayaran"
-              @click="refresh()"
-            />
+            <div class="flex items-center gap-2">
+              <UButton
+                v-if="data.invoice.status === 'lunas' && !data.invoice.has_reviewed"
+                icon="i-lucide-star"
+                color="warning"
+                variant="subtle"
+                size="sm"
+                label="Beri Rating & Ulasan"
+                @click="isReviewPopupOpen = true"
+              />
+              <UButton
+                icon="i-lucide-refresh-cw"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                label="Cek Status Pembayaran"
+                @click="refresh()"
+              />
+            </div>
           </div>
         </UCard>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <!-- KOLOM KIRI: QRIS DINAMIS (SAAT PENDING) ATAU AKUN (SAAT LUNAS) -->
           <div>
             <InvoiceQrisCountdownCard
               v-if="data.invoice.status === 'pending'"
@@ -109,7 +129,6 @@ function formatRupiah(val: number) {
             </UCard>
           </div>
 
-          <!-- KOLOM KANAN: RINCIAN PRODUK, HARGA & ATURAN PEMAKAIAN DARI ADMIN -->
           <div class="space-y-6">
             <UCard>
               <template #header>
@@ -149,7 +168,6 @@ function formatRupiah(val: number) {
               </div>
             </UCard>
 
-            <!-- ATURAN PEMAKAIAN YANG DI-CRUD OLEH ADMIN -->
             <UCard>
               <template #header>
                 <div class="flex items-center gap-2 text-warning font-bold text-sm">
@@ -166,6 +184,15 @@ function formatRupiah(val: number) {
             </UCard>
           </div>
         </div>
+
+        <!-- LEGO POP-UP RATING & ULASAN SETELAH BAYAR -->
+        <InvoiceReviewPopupModal
+          v-model:open="isReviewPopupOpen"
+          :invoice-token="token"
+          :product-name="data.invoice.product_name"
+          :variant-name="data.invoice.variant_name"
+          @submitted="refresh()"
+        />
       </UContainer>
     </main>
 

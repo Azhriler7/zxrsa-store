@@ -23,11 +23,11 @@ const { data } = await useFetch('/api/store/catalog')
       <!-- LEGO 3: PILIH PAKET + FORM GMAIL + TOMBOL BAYAR -->
       <StorefrontPackageSelectorSection :catalog="data?.catalog || []" />
 
-      <!-- LEGO 4: TESTIMONY SECTION -->
-      <StorefrontTestimonySection />
+      <!-- LEGO 4: TESTIMONY SECTION (AUTO-SLIDE DINAMIS) -->
+      <StorefrontTestimonySection :testimonials="data?.testimonials || []" />
 
-      <!-- LEGO 5: FAQ SECTION -->
-      <StorefrontFaqSection />
+      <!-- LEGO 5: FAQ SECTION (DINAMIS DARI ADMIN) -->
+      <StorefrontFaqSection :faqs="data?.faqs || []" />
     </main>
 
     <!-- LEGO 6: KONTAK & FOOTER DIGABUNG -->
