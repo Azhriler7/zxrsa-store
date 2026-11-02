@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/ActiveInvoiceBanner.vue
- DESKRIPSI: Section Card Pesanan/QRIS Aktif Pembeli (Terletak di Antara
-            Section Pilih Paket dan Section Testimoni).
+ DESKRIPSI: Section Card Pesanan Aktif Pembeli (Tanpa Tombol Tutup Saat
+            Status Masih Pending atau Lunas agar Tidak Rawan Salah Pencet).
 =========================================================================== -->
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
@@ -42,7 +42,6 @@ async function syncLatestInvoiceStatus() {
       calculateRemainingSeconds()
     }
   } catch {
-    // Jika token tidak ditemukan di DB, bersihkan sesi
     clearInvoiceSession()
   } finally {
     isRefreshing.value = false
@@ -56,14 +55,12 @@ onMounted(() => {
   }
 })
 
-// Hitung mundur timer setiap 1 detik
 useIntervalFn(() => {
   if (activeInvoice.value?.status === 'pending') {
     calculateRemainingSeconds()
   }
 }, 1000)
 
-// Auto-poll status setiap 6 detik jika masih pending
 useIntervalFn(() => {
   if (activeInvoice.value?.status === 'pending') {
     syncLatestInvoiceStatus()
@@ -89,7 +86,6 @@ function formatRupiah(val: number) {
     <UContainer class="max-w-4xl">
       <UCard class="border-2 border-primary/50 shadow-lg bg-default">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <!-- INFO PAKET, HARGA, STATUS & WAKTU -->
           <div class="space-y-2">
             <div class="flex flex-wrap items-center gap-2">
               <UBadge
@@ -105,7 +101,6 @@ function formatRupiah(val: number) {
               </span>
               <CommonInvoiceStatusBadge :status="activeInvoice.status" />
 
-              <!-- WAKTU COUNTDOWN JIKA MASIH PENDING -->
               <UBadge
                 v-if="activeInvoice.status === 'pending' && remainingSeconds > 0"
                 color="warning"
@@ -134,12 +129,11 @@ function formatRupiah(val: number) {
                 Pembayaran telah Lunas! Klik tombol di samping untuk melihat detail akun dan invoice Anda.
               </template>
               <template v-else>
-                Waktu pembayaran untuk pesanan ini telah habis ({{ activeInvoice.status.toUpperCase() }}).
+                Waktu pembayaran untuk pesanan ini telah berakhir ({{ activeInvoice.status.toUpperCase() }}).
               </template>
             </p>
           </div>
 
-          <!-- TOMBOL KEMBALI KE QRIS / TUTUP SESI -->
           <div class="flex items-center gap-2 shrink-0">
             <UButton
               :to="`/invoice/${activeInvoice.invoiceToken}`"
@@ -150,7 +144,11 @@ function formatRupiah(val: number) {
               :loading="isRefreshing"
             />
 
-            <UTooltip text="Sembunyikan kartu riwayat sesi ini">
+            <!-- TOMBOL SEMBUNYIKAN HANYA MUNCUL JIKA SUDAH EXPIRED / DIBATALKAN / FAILED -->
+            <UTooltip
+              v-if="activeInvoice.status !== 'pending' && activeInvoice.status !== 'lunas'"
+              text="Tutup pemberitahuan pesanan yang sudah kedaluwarsa ini"
+            >
               <UButton
                 color="neutral"
                 variant="ghost"

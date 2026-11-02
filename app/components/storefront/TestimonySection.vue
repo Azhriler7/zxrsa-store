@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/TestimonySection.vue
- DESKRIPSI: Komponen Lego Section Testimoni dengan Teknik Infinite Marquee
-            60fps (useRafFn) Tanpa Custom Class CSS agar 100% Lulus Linter.
+ DESKRIPSI: Komponen Lego Section Testimoni dengan Infinite Marquee +
+            Dukungan Geser Manual (Touch Swipe & Mouse Drag Kanan-Kiri).
 =========================================================================== -->
 <script setup lang="ts">
 import { useRafFn } from '@vueuse/core'
@@ -11,11 +11,15 @@ const props = defineProps<{
   testimonials: DbTestimonial[]
 }>()
 
-const trackRef = ref<HTMLElement | null>(null)
-const isPaused = ref(false)
-const offsetPx = ref(0)
+const viewportRef = ref<HTMLElement | null>(null)
+const isHovered = ref(false)
+const isDragging = ref(false)
+const startX = ref(0)
+const startScrollLeft = ref(0)
 
-// Pastikan item cukup panjang sebelum digandakan menjadi 2 set identik
+// Akumulator pecahan piksel agar gerakan lambat tetap mulus di semua layar
+let subPixelAccumulator = 0
+
 const baseTrackItems = computed(() => {
   const list = props.testimonials || []
   if (list.length === 0) return []
@@ -23,21 +27,62 @@ const baseTrackItems = computed(() => {
   return [...list, ...list, ...list]
 })
 
-// Animasi Infinite Marquee 60fps dari kanan ke kiri tanpa putus
-useRafFn(() => {
-  if (isPaused.value || !trackRef.value || baseTrackItems.value.length === 0) return
-
-  const halfWidth = trackRef.value.scrollWidth / 2
+// Menjaga posisi scroll selalu berada di dalam lingkaran tanpa batas (Infinite Wrap)
+function normalizeInfiniteScroll(el: HTMLElement) {
+  const halfWidth = el.scrollWidth / 2
   if (halfWidth <= 0) return
 
-  // Kecepatan gerak lambat & mulus (0.55 pixel per frame)
-  offsetPx.value += 0.55
+  if (el.scrollLeft >= halfWidth) {
+    el.scrollLeft -= halfWidth
+  } else if (el.scrollLeft <= 0) {
+    el.scrollLeft += halfWidth
+  }
+}
 
-  // Begitu set pertama habis terlewati, kembalikan ke 0 tanpa terlihat melompat
-  if (offsetPx.value >= halfWidth) {
-    offsetPx.value = 0
+// Loop Otomatis 60fps ketika tidak sedang di-hover / digeser manual
+useRafFn(() => {
+  const el = viewportRef.value
+  if (!el || isHovered.value || isDragging.value || baseTrackItems.value.length === 0) return
+
+  subPixelAccumulator += 0.65
+  if (subPixelAccumulator >= 1) {
+    const step = Math.floor(subPixelAccumulator)
+    el.scrollLeft += step
+    subPixelAccumulator -= step
+    normalizeInfiniteScroll(el)
   }
 })
+
+// Handler Geser Manual dengan Mouse (Desktop Drag Kanan-Kiri)
+function onMouseDown(e: MouseEvent) {
+  const el = viewportRef.value
+  if (!el) return
+  isDragging.value = true
+  startX.value = e.pageX - el.offsetLeft
+  startScrollLeft.value = el.scrollLeft
+}
+
+function onMouseMove(e: MouseEvent) {
+  const el = viewportRef.value
+  if (!isDragging.value || !el) return
+  e.preventDefault()
+  const x = e.pageX - el.offsetLeft
+  const walk = (x - startX.value) * 1.2
+  el.scrollLeft = startScrollLeft.value - walk
+  normalizeInfiniteScroll(el)
+}
+
+function stopDragging() {
+  isDragging.value = false
+}
+
+// Saat digeser dengan jari di layar sentuh (Touch Scroll Native), jaga agar tetap loop
+function onTouchScroll() {
+  const el = viewportRef.value
+  if (el) {
+    normalizeInfiniteScroll(el)
+  }
+}
 </script>
 
 <template>
@@ -58,7 +103,7 @@ useRafFn(() => {
           Ulasan & Testimoni Pembeli
         </h2>
         <p class="text-xs text-muted">
-          Ulasan asli dari pelanggan kami (Alamat email disamarkan otomatis untuk menjaga privasi).
+          Sentuh atau geser kartu ke kanan/kiri untuk membaca ulasan pelanggan kami.
         </p>
       </div>
     </UContainer>
@@ -70,21 +115,22 @@ useRafFn(() => {
       Belum ada ulasan yang ditampilkan.
     </div>
 
-    <!-- INFINITE MARQUEE VIEWPORT (MURNI TAILWIND UTILITY CLASSES) -->
+    <!-- VIEWPORT INFINITE MARQUEE + DRAGGABLE / SWIPEABLE -->
     <div
       v-else
-      class="relative w-full overflow-hidden py-2"
-      @mouseenter="isPaused = true"
-      @mouseleave="isPaused = false"
-      @touchstart="isPaused = true"
-      @touchend="isPaused = false"
+      ref="viewportRef"
+      class="relative w-full overflow-x-auto py-2 select-none scrollbar-none [&::-webkit-scrollbar]:hidden"
+      :class="isDragging ? 'cursor-grabbing' : 'cursor-grab'"
+      @mouseenter="isHovered = true"
+      @mouseleave="isHovered = false; stopDragging()"
+      @mousedown="onMouseDown"
+      @mousemove="onMouseMove"
+      @mouseup="stopDragging"
+      @touchstart.passive="isHovered = true"
+      @touchend.passive="isHovered = false"
+      @scroll.passive="onTouchScroll"
     >
-      <!-- TRACK BERISI 2 SET IDENTIK UNTUK CONTINUOUS LOOP -->
-      <div
-        ref="trackRef"
-        class="flex w-max will-change-transform"
-        :style="{ transform: `translate3d(-${offsetPx}px, 0, 0)` }"
-      >
+      <div class="flex w-max">
         <div
           v-for="setIndex in 2"
           :key="`set-${setIndex}`"

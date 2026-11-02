@@ -1,10 +1,11 @@
 // ============================================================================
 // FILE: server/emails/InvoiceEmail.ts
 // DESKRIPSI: Komponen Vue-Email berbasis TypeScript Render Function (h)
-//            agar 100% kompatibel dengan Rollup/Nitro Cloudflare Workers.
+//            Menampilkan Email & Password Akun serta Link Invoice yang Valid.
 // ============================================================================
 
 import { defineComponent, h } from 'vue'
+import type { PropType } from 'vue'
 import {
   Html,
   Head,
@@ -27,10 +28,9 @@ export default defineComponent({
     duration: { type: String, required: true },
     totalAmountFormatted: { type: String, required: true },
     isCustomGmail: { type: Boolean, required: true },
-    customGmailTarget: { type: String, default: null },
-    accountEmail: { type: String, default: null },
-    accountPassword: { type: String, default: null },
-    accountExtraLink: { type: String, default: null },
+    customGmailTarget: { type: [String, null] as PropType<string | null>, default: null },
+    accountEmail: { type: [String, null] as PropType<string | null>, default: null },
+    accountPassword: { type: [String, null] as PropType<string | null>, default: null },
     usageRules: { type: String, required: true },
     invoiceUrl: { type: String, required: true }
   },
@@ -63,7 +63,6 @@ export default defineComponent({
                 }
               },
               () => [
-                // HEADER EMAIL
                 h(Section, null, () => [
                   h(
                     Heading,
@@ -79,7 +78,6 @@ export default defineComponent({
 
                 h(Hr, { style: { borderColor: '#334155', margin: '20px 0' } }),
 
-                // DETAIL PRODUK & HARGA
                 h(Section, null, () => [
                   h(
                     Text,
@@ -100,7 +98,6 @@ export default defineComponent({
 
                 h(Hr, { style: { borderColor: '#334155', margin: '20px 0' } }),
 
-                // KOTAK KREDENSIAL AKUN ATAU KONFIRMASI CUSTOM GMAIL
                 h(
                   Section,
                   {
@@ -123,7 +120,7 @@ export default defineComponent({
                             Text,
                             { style: { margin: '0', fontSize: '13px', color: '#cbd5e1', lineHeight: '1.6' } },
                             () =>
-                              `Paket premium untuk alamat Gmail Anda (${props.customGmailTarget}) telah selesai diproses dan dikonfirmasi oleh Admin kami.`
+                              `Paket premium untuk alamat Gmail Anda (${props.customGmailTarget || '-'}) telah selesai diproses dan dikonfirmasi oleh Admin kami.`
                           )
                         ]
                       : [
@@ -139,22 +136,12 @@ export default defineComponent({
                           ),
                           h(
                             Text,
-                            { style: { margin: '0 0 6px 0', fontSize: '13px', color: '#f8fafc', fontFamily: 'monospace' } },
+                            { style: { margin: '0', fontSize: '13px', color: '#f8fafc', fontFamily: 'monospace' } },
                             () => `Password: ${props.accountPassword || '-'}`
-                          ),
-                          ...(props.accountExtraLink
-                            ? [
-                                h(
-                                  Text,
-                                  { style: { margin: '0', fontSize: '13px', color: '#38bdf8', fontFamily: 'monospace' } },
-                                  () => `Link Akses OTP/Inbox: ${props.accountExtraLink}`
-                                )
-                              ]
-                            : [])
+                          )
                         ]
                 ),
 
-                // ATURAN PEMAKAIAN
                 h(Section, { style: { marginTop: '20px' } }, () => [
                   h(
                     Heading,
@@ -168,7 +155,6 @@ export default defineComponent({
                   )
                 ]),
 
-                // TOMBOL INVOICE WEB
                 h(Section, { style: { marginTop: '24px', textAlign: 'center' } }, () => [
                   h(
                     Button,
