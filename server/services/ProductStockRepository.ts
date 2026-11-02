@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: server/services/ProductStockRepository.ts
-// DESKRIPSI: Repository OOP untuk CRUD Produk, Paket/Promo, & Manajemen Stok
-//            Terenkripsi AES-256-GCM dari file .txt.
+// DESKRIPSI: Repository OOP untuk CRUD Produk (Auto-Slug), Paket/Promo,
+//            Proteksi Hapus Saat Stok Masih Ada, & Enkripsi Stok .txt.
 // ============================================================================
 
 import type { DbProduct, DbProductVariant } from '../types/database'
@@ -19,10 +19,6 @@ export interface ProductWithVariants extends DbProduct {
 }
 
 export class ProductStockRepository extends BaseRepository {
-  // --------------------------------------------------------------------------
-  // [SECTION: GET ALL PRODUCTS & VARIANTS WITH STOCK COUNTS]
-  // Mengambil daftar aplikasi premium beserta paket dan jumlah stok ready
-  // --------------------------------------------------------------------------
   public async getAllProductsWithVariants(): Promise<ProductWithVariants[]> {
     const { results: products } = await this.db
       .prepare('SELECT * FROM products ORDER BY created_at DESC')
@@ -41,9 +37,9 @@ export class ProductStockRepository extends BaseRepository {
       )
       .all<VariantWithStockCount>()
 
-    return products.map(prod => ({
+    return (products || []).map(prod => ({
       ...prod,
-      variants: variants
+      variants: (variants || [])
         .filter(v => v.product_id === prod.id)
         .map(v => ({
           ...v,
@@ -54,12 +50,11 @@ export class ProductStockRepository extends BaseRepository {
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: CREATE OR UPDATE PRODUCT (CRUD PRODUK & ATURAN PAKAI)]
+  // [SECTION: CREATE OR UPDATE PRODUCT (AUTO-GENERATE SLUG DARI NAMA)]
   // --------------------------------------------------------------------------
   public async upsertProduct(payload: {
     id?: string
     name: string
-    slug: string
     description?: string | null
     usage_rules: string
     image_url?: string | null
@@ -68,6 +63,14 @@ export class ProductStockRepository extends BaseRepository {
   }): Promise<string> {
     const productId = payload.id || `prd_${crypto.randomUUID().slice(0, 8)}`
     const activeInt = payload.is_active ? 1 : 0
+
+    // Auto-generate slug bersih dari nama aplikasi + akhiran ID singkat agar tidak pernah bentrok
+    const baseSlug = payload.name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+    const autoSlug = `${baseSlug}-${productId.slice(-4)}`
 
     await this.db
       .prepare(
@@ -86,7 +89,7 @@ export class ProductStockRepository extends BaseRepository {
       .bind(
         productId,
         payload.name.trim(),
-        payload.slug.trim().toLowerCase(),
+        autoSlug,
         payload.description || null,
         payload.usage_rules.trim(),
         payload.image_url || null,
@@ -103,9 +106,50 @@ export class ProductStockRepository extends BaseRepository {
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: DELETE PRODUCT]
+  // [SECTION: DELETE PRODUCT DENGAN PROTEKSI STOK & PEMBERSIHAN RELASI]
   // --------------------------------------------------------------------------
   public async deleteProduct(productId: string): Promise<void> {
+    // 1. Cek apakah masih ada stok 'available' di salah satu paket produk ini
+    const stockCheck = await this.db
+      .prepare(
+        `SELECT COUNT(s.id) as ready_count
+         FROM account_stocks s
+         JOIN product_variants pv ON pv.id = s.variant_id
+         WHERE pv.product_id = ?1 AND s.status = 'available'`
+      )
+      .bind(productId)
+      .first<{ ready_count: number }>()
+
+    const readyStock = Number(stockCheck?.ready_count ?? 0)
+    if (readyStock > 0) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `Gagal menghapus! Produk ini masih memiliki ${readyStock} stok akun tersedia. Kosongkan stok terlebih dahulu di menu Input Stok (.txt).`
+      })
+    }
+
+    // 2. Jika stok available sudah 0, bersihkan relasi di transactions & account_stocks agar tidak terkena Foreign Key Error
+    await this.db
+      .prepare(
+        `DELETE FROM transactions
+         WHERE variant_id IN (SELECT id FROM product_variants WHERE product_id = ?1)`
+      )
+      .bind(productId)
+      .run()
+
+    await this.db
+      .prepare(
+        `DELETE FROM account_stocks
+         WHERE variant_id IN (SELECT id FROM product_variants WHERE product_id = ?1)`
+      )
+      .bind(productId)
+      .run()
+
+    await this.db
+      .prepare('DELETE FROM product_variants WHERE product_id = ?1')
+      .bind(productId)
+      .run()
+
     await this.db
       .prepare('DELETE FROM products WHERE id = ?1')
       .bind(productId)
@@ -115,7 +159,7 @@ export class ProductStockRepository extends BaseRepository {
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: CREATE OR UPDATE VARIANT (CRUD PAKET & WAKTU PROMO)]
+  // [SECTION: CREATE OR UPDATE VARIANT]
   // --------------------------------------------------------------------------
   public async upsertVariant(payload: {
     id?: string
@@ -170,32 +214,37 @@ export class ProductStockRepository extends BaseRepository {
       )
       .run()
 
-    await this.writeSystemLog('info', 'VARIANT_CRUD', `Simpan paket: ${payload.name}`, {
-      variantId,
-      price: payload.price,
-      promoPrice: payload.promo_price
-    })
-
     return variantId
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: DELETE VARIANT]
+  // [SECTION: DELETE VARIANT DENGAN PROTEKSI STOK]
   // --------------------------------------------------------------------------
   public async deleteVariant(variantId: string): Promise<void> {
-    await this.db
-      .prepare('DELETE FROM product_variants WHERE id = ?1')
+    const stockCheck = await this.db
+      .prepare(
+        `SELECT COUNT(id) as ready_count
+         FROM account_stocks
+         WHERE variant_id = ?1 AND status = 'available'`
+      )
       .bind(variantId)
-      .run()
+      .first<{ ready_count: number }>()
+
+    const readyStock = Number(stockCheck?.ready_count ?? 0)
+    if (readyStock > 0) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `Paket ini masih memiliki ${readyStock} stok tersedia! Kosongkan stok terlebih dahulu di menu Input Stok (.txt) sebelum menghapus paket.`
+      })
+    }
+
+    await this.db.prepare('DELETE FROM transactions WHERE variant_id = ?1').bind(variantId).run()
+    await this.db.prepare('DELETE FROM account_stocks WHERE variant_id = ?1').bind(variantId).run()
+    await this.db.prepare('DELETE FROM product_variants WHERE id = ?1').bind(variantId).run()
 
     await this.writeSystemLog('warn', 'VARIANT_CRUD', `Hapus varian paket ID: ${variantId}`)
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: BULK UPLOAD & ENCRYPT STOCKS FROM .TXT]
-  // Membaca banyak akun dari teks .txt, memisahkan dengan Polymorphic Parser,
-  // lalu mengenkripsi masing-masing akun dengan AES-256-GCM sebelum masuk D1.
-  // --------------------------------------------------------------------------
   public async bulkAddStocksFromTxt(variantId: string, rawTxtContent: string) {
     const config = useRuntimeConfig(this.event)
     const cryptoService = new CryptoService(config.encryptionKey)
@@ -225,27 +274,12 @@ export class ProductStockRepository extends BaseRepository {
       insertedCount++
     }
 
-    await this.writeSystemLog(
-      'info',
-      'STOCK_UPLOAD',
-      `Berhasil menambahkan ${insertedCount} stok akun terenkripsi ke paket ${variantId}`,
-      {
-        variantId,
-        insertedCount,
-        rejectedLinesCount: parsedResult.invalidLines.length
-      }
-    )
-
     return {
       insertedCount,
       invalidLines: parsedResult.invalidLines
     }
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: REDUCE / CLEAR AVAILABLE STOCKS]
-  // Mengurangi jumlah stok 'available' pada varian paket tertentu
-  // --------------------------------------------------------------------------
   public async reduceAvailableStock(variantId: string, amountToReduce: number): Promise<number> {
     await this.db
       .prepare(
@@ -259,13 +293,6 @@ export class ProductStockRepository extends BaseRepository {
       )
       .bind(variantId, Math.floor(amountToReduce))
       .run()
-
-    await this.writeSystemLog(
-      'warn',
-      'STOCK_REDUCE',
-      `Mengurangi maksimal ${amountToReduce} stok available pada paket ${variantId}`,
-      { variantId, amountToReduce }
-    )
 
     return amountToReduce
   }

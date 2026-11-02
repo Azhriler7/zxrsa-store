@@ -35,7 +35,8 @@ export interface AdminTransactionRow {
 
 export class AdminInvoiceRepository extends BaseRepository {
   // --------------------------------------------------------------------------
-  // [SECTION: GET ALL INVOICES / PURCHASE HISTORY]
+  // [SECTION: GET ALL INVOICES / PURCHASE HISTORY (SAFE LEFT JOIN)]
+  // Tetap aman dibuka meskipun tabel kosong atau produk lama telah dihapus
   // --------------------------------------------------------------------------
   public async getAllInvoices(statusFilter?: string): Promise<AdminTransactionRow[]> {
     const baseQuery = `
@@ -44,11 +45,14 @@ export class AdminInvoiceRepository extends BaseRepository {
         t.variant_id, t.account_stock_id, t.base_amount, t.unique_code,
         t.total_amount, t.status, t.custom_gmail_status, t.expires_at,
         t.paid_at, t.email_sent_at, t.created_at,
-        p.name as product_name, p.usage_rules,
-        pv.name as variant_name, pv.duration, pv.is_custom_gmail
+        COALESCE(p.name, 'Produk Dihapus') as product_name,
+        COALESCE(p.usage_rules, '-') as usage_rules,
+        COALESCE(pv.name, 'Paket Dihapus') as variant_name,
+        COALESCE(pv.duration, '-') as duration,
+        COALESCE(pv.is_custom_gmail, 0) as is_custom_gmail
       FROM transactions t
-      JOIN product_variants pv ON pv.id = t.variant_id
-      JOIN products p ON p.id = pv.product_id
+      LEFT JOIN product_variants pv ON pv.id = t.variant_id
+      LEFT JOIN products p ON p.id = pv.product_id
     `
 
     if (statusFilter && statusFilter !== 'all') {
@@ -56,19 +60,18 @@ export class AdminInvoiceRepository extends BaseRepository {
         .prepare(`${baseQuery} WHERE t.status = ?1 ORDER BY t.created_at DESC LIMIT 100`)
         .bind(statusFilter)
         .all<AdminTransactionRow>()
-      return results
+      return results || []
     }
 
     const { results } = await this.db
       .prepare(`${baseQuery} ORDER BY t.created_at DESC LIMIT 100`)
       .all<AdminTransactionRow>()
 
-    return results
+    return results || []
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: GET CUSTOM GMAIL QUEUE (KHUSUS PAKET CUSTOM GMAIL)]
-  // Mengambil daftar pembelian paket Custom Gmail yang butuh konfirmasi Admin
+  // [SECTION: GET CUSTOM GMAIL QUEUE (SAFE LEFT JOIN)]
   // --------------------------------------------------------------------------
   public async getCustomGmailQueue(): Promise<AdminTransactionRow[]> {
     const { results } = await this.db
@@ -78,19 +81,23 @@ export class AdminInvoiceRepository extends BaseRepository {
            t.variant_id, t.account_stock_id, t.base_amount, t.unique_code,
            t.total_amount, t.status, t.custom_gmail_status, t.expires_at,
            t.paid_at, t.email_sent_at, t.created_at,
-           p.name as product_name, p.usage_rules,
-           pv.name as variant_name, pv.duration, pv.is_custom_gmail
+           COALESCE(p.name, 'Produk Custom Gmail') as product_name,
+           COALESCE(p.usage_rules, '-') as usage_rules,
+           COALESCE(pv.name, 'Paket Custom Gmail') as variant_name,
+           COALESCE(pv.duration, '-') as duration,
+           COALESCE(pv.is_custom_gmail, 1) as is_custom_gmail
          FROM transactions t
-         JOIN product_variants pv ON pv.id = t.variant_id
-         JOIN products p ON p.id = pv.product_id
-         WHERE pv.is_custom_gmail = 1 AND t.status = 'lunas'
+         LEFT JOIN product_variants pv ON pv.id = t.variant_id
+         LEFT JOIN products p ON p.id = pv.product_id
+         WHERE (pv.is_custom_gmail = 1 OR t.custom_gmail_account IS NOT NULL)
+           AND t.status = 'lunas'
          ORDER BY 
            CASE WHEN t.custom_gmail_status = 'waiting_admin' THEN 0 ELSE 1 END,
            t.created_at DESC`
       )
       .all<AdminTransactionRow>()
 
-    return results
+    return results || []
   }
 
   // --------------------------------------------------------------------------

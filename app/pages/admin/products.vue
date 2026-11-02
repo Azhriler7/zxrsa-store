@@ -1,6 +1,6 @@
 <!-- ==========================================================================
  FILE: app/pages/admin/products.vue
- DESKRIPSI: Halaman Admin CRUD Produk Aplikasi, Varian Paket, & Waktu Promo
+ DESKRIPSI: Halaman Admin CRUD Produk, Varian Paket, & Peringatan Hapus Stok
 =========================================================================== -->
 <script setup lang="ts">
 import type { ProductFormInitialData } from '~/components/admin/ProductFormModal.vue'
@@ -36,7 +36,6 @@ function openAddProduct() {
 function openEditProduct(prod: {
   id: string
   name: string
-  slug: string
   description: string | null
   usage_rules: string
   promo_badge: string | null
@@ -86,8 +85,42 @@ function openEditVariant(productName: string, v: {
   isVariantModalOpen.value = true
 }
 
-function promptDelete(type: 'product' | 'variant', id: string, name: string) {
-  deleteTarget.value = { type, id, name }
+// ----------------------------------------------------------------------------
+// [SECTION: CEK STOK SEBELUM MEMUNCULKAN DIALOG HAPUS]
+// Memberi pemberitahuan langsung jika produk/paket masih punya stok > 0
+// ----------------------------------------------------------------------------
+function promptDeleteProduct(prod: {
+  id: string
+  name: string
+  variants: { available_stock: number }[]
+}) {
+  const totalReadyStock = prod.variants.reduce((acc, v) => acc + (v.available_stock || 0), 0)
+  if (totalReadyStock > 0) {
+    toast.add({
+      title: 'Tidak Dapat Menghapus Produk!',
+      description: `Produk "${prod.name}" masih memiliki ${totalReadyStock} stok akun tersedia. Silakan kosongkan stok terlebih dahulu di menu Input Stok (.txt).`,
+      color: 'error',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
+
+  deleteTarget.value = { type: 'product', id: prod.id, name: prod.name }
+  isDeleteDialogOpen.value = true
+}
+
+function promptDeleteVariant(v: { id: string, name: string, available_stock: number, is_custom_gmail: 0 | 1 }) {
+  if (!v.is_custom_gmail && v.available_stock > 0) {
+    toast.add({
+      title: 'Tidak Dapat Menghapus Paket!',
+      description: `Paket "${v.name}" masih memiliki ${v.available_stock} stok akun tersedia. Kosongkan stok terlebih dahulu di menu Input Stok (.txt).`,
+      color: 'error',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
+
+  deleteTarget.value = { type: 'variant', id: v.id, name: v.name }
   isDeleteDialogOpen.value = true
 }
 
@@ -101,11 +134,20 @@ async function confirmDelete() {
     toast.add({
       title: 'Berhasil Dihapus',
       description: `${deleteTarget.value.name} telah dihapus.`,
-      color: 'neutral'
+      color: 'success',
+      icon: 'i-lucide-trash-2'
     })
 
     isDeleteDialogOpen.value = false
     await refresh()
+  } catch (err: unknown) {
+    const msg = (err as { data?: { statusMessage?: string } })?.data?.statusMessage || 'Gagal menghapus data.'
+    toast.add({
+      title: 'Gagal Menghapus',
+      description: msg,
+      color: 'error',
+      icon: 'i-lucide-triangle-alert'
+    })
   } finally {
     isDeleting.value = false
   }
@@ -124,7 +166,7 @@ function formatRupiah(val: number) {
           Manajemen Produk, Paket & Waktu Promo
         </h1>
         <p class="text-sm text-muted">
-          Kelola aplikasi premium (Wink, Alight Motion, CapCut), aturan garansi, dan harga promo kapan saja.
+          Kelola aplikasi premium, aturan garansi, dan harga promo kapan saja. (Pastikan stok sudah 0 sebelum menghapus produk/paket).
         </p>
       </div>
 
@@ -136,10 +178,23 @@ function formatRupiah(val: number) {
       />
     </div>
 
+    <!-- EMPTY STATE JIKA SEMUA PRODUK DIHAPUS -->
+    <UCard
+      v-if="!data?.products?.length"
+      class="text-center py-10"
+    >
+      <p class="text-sm text-muted">
+        Belum ada aplikasi premium yang terdaftar. Klik tombol "Tambah Aplikasi Baru" di kanan atas.
+      </p>
+    </UCard>
+
     <!-- DAFTAR PRODUK & TABEL VARIAN PAKET -->
-    <div class="space-y-6">
+    <div
+      v-else
+      class="space-y-6"
+    >
       <UCard
-        v-for="prod in data?.products"
+        v-for="prod in data.products"
         :key="prod.id"
       >
         <template #header>
@@ -187,19 +242,30 @@ function formatRupiah(val: number) {
                 label="Edit Produk"
                 @click="openEditProduct(prod)"
               />
-              <UButton
-                size="xs"
-                color="error"
-                variant="ghost"
-                icon="i-lucide-trash-2"
-                @click="promptDelete('product', prod.id, prod.name)"
-              />
+              <UTooltip text="Hapus Produk (Stok wajib 0)">
+                <UButton
+                  size="xs"
+                  color="error"
+                  variant="ghost"
+                  icon="i-lucide-trash-2"
+                  @click="promptDeleteProduct(prod)"
+                />
+              </UTooltip>
             </div>
           </div>
         </template>
 
-        <!-- TABEL PAKET DI DALAM PRODUK -->
-        <div class="overflow-x-auto">
+        <div
+          v-if="!prod.variants.length"
+          class="py-4 text-center text-xs text-muted"
+        >
+          Belum ada varian paket di aplikasi ini. Klik "Tambah Paket" di atas.
+        </div>
+
+        <div
+          v-else
+          class="overflow-x-auto"
+        >
           <table class="w-full text-left border-collapse text-sm">
             <thead>
               <tr class="border-b border-default text-xs text-muted uppercase">
@@ -278,13 +344,15 @@ function formatRupiah(val: number) {
                     icon="i-lucide-pencil"
                     @click="openEditVariant(prod.name, v)"
                   />
-                  <UButton
-                    size="xs"
-                    color="error"
-                    variant="ghost"
-                    icon="i-lucide-trash-2"
-                    @click="promptDelete('variant', v.id, v.name)"
-                  />
+                  <UTooltip text="Hapus Paket (Stok wajib 0)">
+                    <UButton
+                      size="xs"
+                      color="error"
+                      variant="ghost"
+                      icon="i-lucide-trash-2"
+                      @click="promptDeleteVariant(v)"
+                    />
+                  </UTooltip>
                 </td>
               </tr>
             </tbody>
@@ -293,7 +361,6 @@ function formatRupiah(val: number) {
       </UCard>
     </div>
 
-    <!-- KOMPONEN LEGO MODAL & CONFIRM DIALOG -->
     <AdminProductFormModal
       v-model:open="isProductModalOpen"
       :initial-data="selectedProduct"
@@ -309,8 +376,8 @@ function formatRupiah(val: number) {
     <CommonConfirmDialog
       v-model:open="isDeleteDialogOpen"
       title="Konfirmasi Penghapusan"
-      :description="`Apakah Anda yakin ingin menghapus '${deleteTarget?.name}' secara permanen?`"
-      confirm-label="Ya, Hapus"
+      :description="`Stok pada '${deleteTarget?.name}' sudah 0. Apakah Anda yakin ingin menghapusnya secara permanen?`"
+      confirm-label="Ya, Hapus Permanen"
       confirm-color="error"
       :loading="isDeleting"
       @confirm="confirmDelete"

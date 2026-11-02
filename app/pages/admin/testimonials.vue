@@ -1,6 +1,6 @@
 <!-- ==========================================================================
  FILE: app/pages/admin/testimonials.vue
- DESKRIPSI: Halaman Admin CRUD Testimoni (Moderasi Review Pembeli & Input Manual)
+ DESKRIPSI: Halaman Admin CRUD Testimoni (Dropdown Paket dari Tabel Paket)
 =========================================================================== -->
 <script setup lang="ts">
 import type { DbTestimonial } from '~~/server/types/database'
@@ -16,6 +16,18 @@ useSeoMeta({
 
 const toast = useToast()
 const { data, refresh } = await useFetch('/api/admin/testimonials')
+const { data: productsData } = await useFetch('/api/admin/products')
+
+// Opsi Dropdown Nama Aplikasi & Paket langsung dari database product_variants
+const packageDropdownOptions = computed(() => {
+  const options: string[] = []
+  for (const prod of productsData.value?.products || []) {
+    for (const v of prod.variants || []) {
+      options.push(`${prod.name} — ${v.name}`)
+    }
+  }
+  return options
+})
 
 const isModalOpen = ref(false)
 const isSaving = ref(false)
@@ -34,7 +46,7 @@ const form = reactive({
 function openAddModal() {
   form.id = undefined
   form.customer_email = ''
-  form.product_package_name = 'Alight Motion Pro — Private 1 Tahun'
+  form.product_package_name = packageDropdownOptions.value[0] || ''
   form.rating = 5
   form.comment = ''
   form.is_approved = true
@@ -52,6 +64,11 @@ function openEditModal(item: DbTestimonial) {
 }
 
 async function saveTestimonial() {
+  if (!form.product_package_name) {
+    toast.add({ title: 'Pilih Paket', description: 'Silakan pilih paket dari dropdown terlebih dahulu.', color: 'warning' })
+    return
+  }
+
   isSaving.value = true
   try {
     await $fetch('/api/admin/testimonials', {
@@ -128,7 +145,17 @@ async function confirmDelete() {
     </div>
 
     <UCard>
-      <div class="overflow-x-auto">
+      <div
+        v-if="!data?.testimonials?.length"
+        class="py-10 text-center text-sm text-muted"
+      >
+        Belum ada daftar testimoni.
+      </div>
+
+      <div
+        v-else
+        class="overflow-x-auto"
+      >
         <table class="w-full text-left border-collapse text-sm">
           <thead>
             <tr class="border-b border-default text-xs text-muted uppercase">
@@ -157,7 +184,7 @@ async function confirmDelete() {
           </thead>
           <tbody class="divide-y divide-default">
             <tr
-              v-for="item in data?.testimonials"
+              v-for="item in data.testimonials"
               :key="item.id"
             >
               <td class="py-3 px-3">
@@ -223,11 +250,11 @@ async function confirmDelete() {
       </div>
     </UCard>
 
-    <!-- MODAL INPUT / EDIT TESTIMONI OLEH ADMIN -->
+    <!-- MODAL INPUT / EDIT TESTIMONI OLEH ADMIN (DENGAN DROPDOWN PAKET) -->
     <UModal
       v-model:open="isModalOpen"
       :title="form.id ? 'Edit Testimoni' : 'Tambah Testimoni Manual'"
-      description="Email akan otomatis disamarkan sebagian (contoh: abc***@gmail.com) saat ditampilkan di halaman pembeli."
+      description="Pilih paket langsung dari daftar paket toko. Email akan disamarkan otomatis (abc***@gmail.com)."
     >
       <template #body>
         <div class="space-y-4">
@@ -244,14 +271,27 @@ async function confirmDelete() {
           </UFormField>
 
           <UFormField
-            label="Nama Aplikasi & Paket"
+            label="Pilih Aplikasi & Paket"
             required
           >
-            <UInput
+            <select
               v-model="form.product_package_name"
-              placeholder="Wink VIP — Private 1 Bulan"
-              class="w-full"
-            />
+              class="w-full rounded-md border border-default bg-default px-3 py-2 text-sm text-highlighted focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option
+                value=""
+                disabled
+              >
+                -- Pilih Paket dari Tabel Paket --
+              </option>
+              <option
+                v-for="pkg in packageDropdownOptions"
+                :key="pkg"
+                :value="pkg"
+              >
+                {{ pkg }}
+              </option>
+            </select>
           </UFormField>
 
           <UFormField
