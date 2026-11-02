@@ -296,4 +296,88 @@ export class ProductStockRepository extends BaseRepository {
 
     return amountToReduce
   }
+
+  // --------------------------------------------------------------------------
+  // [SECTION: GET AVAILABLE STOCK ITEMS FOR ADMIN PICKER MODAL]
+  // Mengambil daftar stok 'available' pada varian tertentu & mendekripsi
+  // identitas akun agar Admin tahu stok mana yang akan dikeluarkan.
+  // --------------------------------------------------------------------------
+  public async getAvailableStocksByVariant(variantId: string): Promise<{
+    id: number
+    accountLabel: string
+    formatType: string
+    createdAt: string
+  }[]> {
+    const config = useRuntimeConfig(this.event)
+    const cryptoService = new CryptoService(config.encryptionKey)
+
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, encrypted_account_data, format_type, created_at
+         FROM account_stocks
+         WHERE variant_id = ?1 AND status = 'available'
+         ORDER BY id ASC`
+      )
+      .bind(variantId)
+      .all<{
+      id: number
+      encrypted_account_data: string
+      format_type: string
+      created_at: string
+    }>()
+
+    const items: {
+      id: number
+      accountLabel: string
+      formatType: string
+      createdAt: string
+    }[] = []
+
+    for (const row of results || []) {
+      let decryptedLabel: string
+      try {
+        decryptedLabel = await cryptoService.decryptAccountData(row.encrypted_account_data)
+      } catch {
+        decryptedLabel = `Stok Terenkripsi #${row.id}`
+      }
+
+      items.push({
+        id: row.id,
+        accountLabel: decryptedLabel,
+        formatType: row.format_type,
+        createdAt: row.created_at
+      })
+    }
+
+    return items
+  }
+
+  // --------------------------------------------------------------------------
+  // [SECTION: DELETE SPECIFIC STOCK IDS SELECTED BY ADMIN]
+  // Menghapus stok spesifik berdasarkan array ID yang dicentang di Pop-up
+  // --------------------------------------------------------------------------
+  public async deleteSpecificStockIds(variantId: string, stockIds: number[]): Promise<number> {
+    if (!stockIds.length) return 0
+
+    let deletedCount = 0
+    for (const stockId of stockIds) {
+      await this.db
+        .prepare(
+          `DELETE FROM account_stocks
+           WHERE id = ?1 AND variant_id = ?2 AND status = 'available'`
+        )
+        .bind(stockId, variantId)
+        .run()
+      deletedCount++
+    }
+
+    await this.writeSystemLog(
+      'warn',
+      'STOCK_REDUCE',
+      `Admin mengeluarkan ${deletedCount} stok terpilih dari paket ${variantId}`,
+      { variantId, deletedCount, stockIds }
+    )
+
+    return deletedCount
+  }
 }
