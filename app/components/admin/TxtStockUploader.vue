@@ -1,6 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/admin/TxtStockUploader.vue
- DESKRIPSI: Komponen Lego Upload File .txt & Live Preview Pemisahan Stok Akun
+ DESKRIPSI: Komponen Lego Upload File .txt & Pop-up Keluarkan Stok Terpilih
+            (Sinkronisasi Increment/Decrement dengan Checkbox List Stok).
 =========================================================================== -->
 <script setup lang="ts">
 export interface VariantOption {
@@ -9,7 +10,14 @@ export interface VariantOption {
   availableStock: number
 }
 
-defineProps<{
+interface StockItemRow {
+  id: number
+  accountLabel: string
+  formatType: string
+  createdAt: string
+}
+
+const props = defineProps<{
   variantOptions: VariantOption[]
 }>()
 
@@ -19,12 +27,88 @@ const toast = useToast()
 const selectedVariantId = ref('')
 const rawTxtContent = ref('')
 const isSubmitting = ref(false)
-const reduceAmount = ref(1)
-const isConfirmReduceOpen = ref(false)
+
+// State untuk Pop-Up Pilih & Keluarkan Stok
+const isStockPickerOpen = ref(false)
+const isLoadingStocks = ref(false)
+const availableStockList = ref<StockItemRow[]>([])
+const selectedStockIds = ref<number[]>([])
+
+const currentVariantInfo = computed(() =>
+  props.variantOptions.find(v => v.id === selectedVariantId.value) || null
+)
+
+// Total stok maksimal yang tersedia pada paket terpilih
+const maxStockCount = computed(() => availableStockList.value.length)
+
+// Jumlah yang sedang dicentang saat ini (selaras dengan checkbox)
+const selectedCount = computed(() => selectedStockIds.value.length)
 
 // ----------------------------------------------------------------------------
-// [SECTION: LIVE PREVIEW PEMISAHAN BARIS .TXT DI SISI CLIENT]
-// Mendukung format 2 kolom (email|pw) & 3 kolom (email | pw | link)
+// [SECTION: BUKA POP-UP & MUAT DAFTAR STOK PAKET TERPILIH]
+// ----------------------------------------------------------------------------
+async function openStockPickerModal() {
+  if (!selectedVariantId.value) return
+  isStockPickerOpen.value = true
+  isLoadingStocks.value = true
+  selectedStockIds.value = []
+
+  try {
+    const res = await $fetch('/api/admin/stocks-list', {
+      query: { variant_id: selectedVariantId.value }
+    })
+    availableStockList.value = res.stocks || []
+  } catch {
+    toast.add({
+      title: 'Gagal Memuat Stok',
+      description: 'Tidak dapat mengambil daftar stok untuk paket ini.',
+      color: 'error'
+    })
+  } finally {
+    isLoadingStocks.value = false
+  }
+}
+
+// ----------------------------------------------------------------------------
+// [SECTION: SINKRONISASI TOMBOL INCREMENT / DECREMENT DENGAN CHECKBOX]
+// ----------------------------------------------------------------------------
+function handleIncrementSelection() {
+  if (selectedStockIds.value.length >= maxStockCount.value) return
+
+  // Cari stok pertama yang belum dicentang, lalu tambahkan ke daftar centang
+  const nextUnchecked = availableStockList.value.find(
+    item => !selectedStockIds.value.includes(item.id)
+  )
+  if (nextUnchecked) {
+    selectedStockIds.value.push(nextUnchecked.id)
+  }
+}
+
+function handleDecrementSelection() {
+  if (selectedStockIds.value.length <= 0) return
+  // Lepas centang pada item terakhir yang dipilih
+  selectedStockIds.value.pop()
+}
+
+function toggleCheckboxItem(stockId: number) {
+  const index = selectedStockIds.value.indexOf(stockId)
+  if (index >= 0) {
+    selectedStockIds.value.splice(index, 1)
+  } else if (selectedStockIds.value.length < maxStockCount.value) {
+    selectedStockIds.value.push(stockId)
+  }
+}
+
+function selectAllStocks() {
+  if (selectedStockIds.value.length === maxStockCount.value) {
+    selectedStockIds.value = []
+  } else {
+    selectedStockIds.value = availableStockList.value.map(s => s.id)
+  }
+}
+
+// ----------------------------------------------------------------------------
+// [SECTION: LIVE PREVIEW PEMISAHAN BARIS .TXT]
 // ----------------------------------------------------------------------------
 const previewParsedLines = computed(() => {
   if (!rawTxtContent.value.trim()) return []
@@ -46,7 +130,6 @@ const previewParsedLines = computed(() => {
     })
 })
 
-// Membaca file .txt yang dipilih dari komputer Admin
 function handleTxtFileChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -65,9 +148,6 @@ function handleTxtFileChange(event: Event) {
   reader.readAsText(file)
 }
 
-// ----------------------------------------------------------------------------
-// [SECTION: SUBMIT TAMBAH STOK TERENKRIPSI KE D1]
-// ----------------------------------------------------------------------------
 async function handleUploadStocks() {
   if (!selectedVariantId.value) {
     toast.add({ title: 'Pilih Paket', description: 'Silakan pilih paket tujuan terlebih dahulu.', color: 'warning' })
@@ -103,30 +183,35 @@ async function handleUploadStocks() {
 }
 
 // ----------------------------------------------------------------------------
-// [SECTION: KURANGI STOK AVAILABLE DENGAN KONFIRMASI]
+// [SECTION: EKSEKUSI KELUARKAN STOK YANG DICENTANG DI POP-UP]
 // ----------------------------------------------------------------------------
-async function handleConfirmReduceStock() {
-  if (!selectedVariantId.value) return
+async function handleConfirmRemoveSelectedStocks() {
+  if (!selectedVariantId.value || selectedStockIds.value.length === 0) return
   isSubmitting.value = true
+
   try {
-    await $fetch('/api/admin/stocks', {
+    const res = await $fetch('/api/admin/stocks', {
       method: 'POST',
       body: {
-        action: 'reduce',
+        action: 'reduce_selected',
         variant_id: selectedVariantId.value,
-        amount: reduceAmount.value
+        stock_ids: selectedStockIds.value
       }
     })
 
     toast.add({
-      title: 'Stok Dikurangi',
-      description: `Berhasil menghapus ${reduceAmount.value} stok available.`,
-      color: 'neutral',
+      title: 'Stok Berhasil Dikeluarkan',
+      description: `${res.reducedCount} akun terpilih telah dihapus dari stok tersedia.`,
+      color: 'success',
       icon: 'i-lucide-trash-2'
     })
 
-    isConfirmReduceOpen.value = false
+    isStockPickerOpen.value = false
+    selectedStockIds.value = []
     emit('uploaded')
+  } catch (err: unknown) {
+    const msg = (err as { data?: { statusMessage?: string } })?.data?.statusMessage || 'Gagal mengurangi stok.'
+    toast.add({ title: 'Kesalahan', description: msg, color: 'error' })
   } finally {
     isSubmitting.value = false
   }
@@ -135,7 +220,7 @@ async function handleConfirmReduceStock() {
 
 <template>
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- KOLOM KIRI: INPUT FILE .TXT & KONTROL TAMBAH/KURANGI STOK -->
+    <!-- KOLOM KIRI: INPUT FILE .TXT -->
     <UCard class="lg:col-span-2">
       <template #header>
         <div class="flex items-center justify-between">
@@ -213,7 +298,7 @@ async function handleConfirmReduceStock() {
       </div>
     </UCard>
 
-    <!-- KOLOM KANAN: LIVE PREVIEW PEMISAHAN & FITUR KURANGI STOK -->
+    <!-- KOLOM KANAN: PREVIEW BARIS & TOMBOL BUKA POP-UP KURANGI STOK -->
     <div class="space-y-6">
       <UCard>
         <template #header>
@@ -256,46 +341,183 @@ async function handleConfirmReduceStock() {
         </div>
       </UCard>
 
-      <!-- FITUR KURANGI STOK -->
+      <!-- KARTU PEMBUKA POP-UP PILIH & KELUARKAN STOK -->
       <UCard>
         <template #header>
-          <h3 class="text-sm font-bold text-highlighted">
-            Kurangi Stok Tersedia
-          </h3>
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-highlighted">
+              Keluarkan / Kurangi Stok Tersedia
+            </h3>
+            <UBadge
+              v-if="currentVariantInfo"
+              color="neutral"
+              variant="subtle"
+              size="xs"
+            >
+              Tersedia: {{ currentVariantInfo.availableStock }}
+            </UBadge>
+          </div>
         </template>
 
         <div class="space-y-3">
-          <UFormField label="Jumlah Stok yang Ingin Dihapus">
-            <UInput
-              v-model="reduceAmount"
-              type="number"
-              min="1"
-              class="w-full"
-            />
-          </UFormField>
+          <p class="text-xs text-muted leading-relaxed">
+            Pilih paket di samping terlebih dahulu, lalu klik tombol di bawah untuk memilih akun mana saja yang ingin dikeluarkan dari daftar stok.
+          </p>
 
           <UButton
             color="error"
             variant="subtle"
-            icon="i-lucide-minus-circle"
-            label="Kurangi Stok Paket Terpilih"
+            icon="i-lucide-list-checks"
+            label="Pilih & Keluarkan Stok..."
             block
-            :disabled="!selectedVariantId"
-            @click="isConfirmReduceOpen = true"
+            :disabled="!selectedVariantId || (currentVariantInfo?.availableStock ?? 0) <= 0"
+            @click="openStockPickerModal"
           />
         </div>
       </UCard>
     </div>
 
-    <!-- DIALOG KONFIRMASI KURANGI STOK -->
-    <CommonConfirmDialog
-      v-model:open="isConfirmReduceOpen"
-      title="Konfirmasi Pengurangan Stok"
-      :description="`Apakah Anda yakin ingin menghapus ${reduceAmount} stok berstatus 'available' dari paket terpilih?`"
-      confirm-label="Ya, Kurangi Stok"
-      confirm-color="error"
-      :loading="isSubmitting"
-      @confirm="handleConfirmReduceStock"
-    />
+    <!-- POP-UP MODAL PILIH STOK DENGAN INCREMENT/DECREMENT & CHECKBOX SELARAS -->
+    <UModal
+      v-model:open="isStockPickerOpen"
+      title="Pilih Stok Akun yang Ingin Dikeluarkan"
+      description="Gunakan tombol (-) / (+) atau centang langsung akun di bawah ini yang ingin dihapus dari stok."
+    >
+      <template #body>
+        <div class="space-y-4">
+          <!-- HEADER NAMA PAKET & KONTROL INCREMENT / DECREMENT -->
+          <div class="p-3.5 rounded-xl bg-elevated border border-default flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="truncate">
+              <span class="text-xs text-muted block">Paket Terpilih:</span>
+              <strong class="text-sm text-highlighted truncate block">
+                {{ currentVariantInfo?.label || '-' }}
+              </strong>
+            </div>
+
+            <!-- TOMBOL DECREMENT [-] | COUNTER | INCREMENT [+] -->
+            <div class="flex items-center gap-2 shrink-0">
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                icon="i-lucide-minus"
+                :disabled="selectedCount <= 0"
+                @click="handleDecrementSelection"
+              />
+
+              <div class="px-3 py-1 rounded-md bg-default border border-default font-mono text-sm font-bold text-center min-w-20">
+                <span class="text-error">{{ selectedCount }}</span>
+                <span class="text-muted"> / {{ maxStockCount }}</span>
+              </div>
+
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                icon="i-lucide-plus"
+                :disabled="selectedCount >= maxStockCount"
+                @click="handleIncrementSelection"
+              />
+            </div>
+          </div>
+
+          <!-- BARIS AKSI CEPAT PILIH SEMUA -->
+          <div class="flex items-center justify-between text-xs px-1">
+            <span class="text-muted">
+              Daftar Akun Ready ({{ maxStockCount }} Stok):
+            </span>
+            <button
+              v-if="maxStockCount > 0"
+              type="button"
+              class="text-primary font-semibold hover:underline cursor-pointer"
+              @click="selectAllStocks"
+            >
+              {{ selectedCount === maxStockCount ? 'Lepas Semua Centang' : 'Centang Semua Stok' }}
+            </button>
+          </div>
+
+          <!-- AREA SCROLLABLE DAFTAR AKUN BESERTA CHECKBOX DI SAMPING KIRI -->
+          <div
+            v-if="isLoadingStocks"
+            class="py-10 text-center text-xs text-muted"
+          >
+            Memuat dan mendekripsi daftar stok...
+          </div>
+
+          <div
+            v-else-if="maxStockCount === 0"
+            class="py-8 text-center text-xs text-muted"
+          >
+            Stok untuk paket ini sudah kosong (0 akun).
+          </div>
+
+          <div
+            v-else
+            class="max-h-72 overflow-y-auto space-y-2 pr-1 border border-default rounded-lg p-2 bg-default"
+          >
+            <div
+              v-for="(stock, index) in availableStockList"
+              :key="stock.id"
+              class="flex items-center gap-3 p-2.5 rounded-lg border transition-colors cursor-pointer select-none"
+              :class="
+                selectedStockIds.includes(stock.id)
+                  ? 'border-error/60 bg-error/10'
+                  : 'border-default bg-elevated/30 hover:bg-elevated'
+              "
+              @click="toggleCheckboxItem(stock.id)"
+            >
+              <input
+                type="checkbox"
+                :checked="selectedStockIds.includes(stock.id)"
+                class="w-4 h-4 rounded text-error focus:ring-error cursor-pointer shrink-0"
+                @click.stop="toggleCheckboxItem(stock.id)"
+              >
+
+              <div class="flex-1 min-w-0 font-mono text-xs">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-bold text-highlighted truncate">
+                    #{{ index + 1 }} — {{ stock.accountLabel }}
+                  </span>
+                  <UBadge
+                    color="neutral"
+                    variant="subtle"
+                    size="xs"
+                    class="shrink-0"
+                  >
+                    ID: {{ stock.id }}
+                  </UBadge>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template #footer>
+        <div class="flex items-center justify-between w-full">
+          <span class="text-xs text-muted">
+            Terpilih: <strong class="text-error">{{ selectedCount }} akun</strong>
+          </span>
+
+          <div class="flex gap-2">
+            <UButton
+              color="neutral"
+              variant="subtle"
+              label="Batal"
+              :disabled="isSubmitting"
+              @click="isStockPickerOpen = false"
+            />
+            <UButton
+              color="error"
+              icon="i-lucide-trash-2"
+              :label="`Keluarkan ${selectedCount} Stok Terpilih`"
+              :loading="isSubmitting"
+              :disabled="selectedCount === 0"
+              @click="handleConfirmRemoveSelectedStocks"
+            />
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>

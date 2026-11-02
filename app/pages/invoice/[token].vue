@@ -1,6 +1,7 @@
 <!-- ==========================================================================
  FILE: app/pages/invoice/[token].vue
- DESKRIPSI: Halaman Dynamic Invoice Pembeli + Pop-Up Rating Otomatis Saat Lunas
+ DESKRIPSI: Halaman Dynamic Invoice Pembeli (Header Tombol Kembali Tanpa Menu
+            Dashboard, Auto-Save Session Pembeli, & Pop-up Rating Saat Lunas).
 =========================================================================== -->
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
@@ -9,6 +10,7 @@ const route = useRoute()
 const token = String(route.params.token || '')
 
 const { data, refresh } = await useFetch(`/api/store/invoice/${token}`)
+const { saveInvoiceSession } = useActiveInvoiceSession()
 
 useSeoMeta({
   title: () => `Invoice ${data.value?.invoice.id || ''} — ZXRSA Store`,
@@ -17,12 +19,24 @@ useSeoMeta({
 
 const isReviewPopupOpen = ref(false)
 
-// Otomatis buka pop-up beri bintang & ulasan begitu status menjadi LUNAS
+// Simpan ke session cookie pembeli setiap kali data invoice dimuat / berubah status
 watch(
-  () => [data.value?.invoice.status, data.value?.invoice.has_reviewed],
-  ([status, hasReviewed]) => {
-    if (status === 'lunas' && !hasReviewed) {
-      isReviewPopupOpen.value = true
+  () => data.value?.invoice,
+  (inv) => {
+    if (inv) {
+      saveInvoiceSession({
+        invoiceId: inv.id,
+        invoiceToken: inv.invoice_token,
+        productName: inv.product_name,
+        variantName: `${inv.variant_name} (${inv.duration})`,
+        totalAmount: inv.total_amount,
+        status: inv.status,
+        expiresAt: inv.expires_at
+      })
+
+      if (inv.status === 'lunas' && !inv.has_reviewed) {
+        isReviewPopupOpen.value = true
+      }
     }
   },
   { immediate: true }
@@ -43,7 +57,26 @@ function formatRupiah(val: number) {
 
 <template>
   <div class="min-h-screen flex flex-col bg-default">
-    <StorefrontStickyNavbar />
+    <!-- HEADER KHUSUS INVOICE: HANYA TOMBOL KEMBALI (TANPA MENU NAVIGASI DASHBOARD) -->
+    <header class="sticky top-0 z-40 h-16 w-full backdrop-blur-md bg-default/85 border-b border-default">
+      <UContainer class="h-full flex items-center justify-between gap-4">
+        <UButton
+          to="/"
+          color="neutral"
+          variant="subtle"
+          size="md"
+          icon="i-lucide-arrow-left"
+          label="Kembali ke Halaman Utama"
+        />
+
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-semibold text-muted hidden sm:inline">
+            Halaman Pembayaran Resmi ZXRSA Store
+          </span>
+          <UColorModeButton size="sm" />
+        </div>
+      </UContainer>
+    </header>
 
     <main class="flex-1 py-10">
       <UContainer
@@ -124,7 +157,7 @@ function formatRupiah(val: number) {
                 to="/"
                 color="primary"
                 icon="i-lucide-arrow-left"
-                label="Buat Pesanan Baru"
+                label="Kembali & Buat Pesanan Baru"
               />
             </UCard>
           </div>
@@ -185,7 +218,6 @@ function formatRupiah(val: number) {
           </div>
         </div>
 
-        <!-- LEGO POP-UP RATING & ULASAN SETELAH BAYAR -->
         <InvoiceReviewPopupModal
           v-model:open="isReviewPopupOpen"
           :invoice-token="token"
@@ -196,7 +228,6 @@ function formatRupiah(val: number) {
       </UContainer>
     </main>
 
-    <StorefrontFooterContact />
     <CommonFloatingWhatsApp />
   </div>
 </template>

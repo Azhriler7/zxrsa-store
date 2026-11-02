@@ -1,6 +1,6 @@
 // ============================================================================
 // FILE: server/api/admin/stocks.post.ts
-// DESKRIPSI: Endpoint API Tambah Stok Massal (.txt) & Kurangi Stok Akun
+// DESKRIPSI: Endpoint API Tambah Stok Massal (.txt) & Keluarkan Stok Terpilih
 // ============================================================================
 
 import { z } from 'zod'
@@ -13,9 +13,9 @@ const stockActionSchema = z.discriminatedUnion('action', [
     raw_txt_content: z.string().min(3, 'Isi file .txt tidak boleh kosong')
   }),
   z.object({
-    action: z.literal('reduce'),
+    action: z.literal('reduce_selected'),
     variant_id: z.string().min(1, 'Pilih paket terlebih dahulu'),
-    amount: z.number().int().positive('Jumlah pengurangan minimal 1')
+    stock_ids: z.array(z.number().int().positive()).min(1, 'Pilih minimal 1 akun untuk dikeluarkan')
   })
 ])
 
@@ -45,7 +45,11 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const reduced = await repo.reduceAvailableStock(body.data.variant_id, body.data.amount)
+  const reduced = await repo.deleteSpecificStockIds(
+    body.data.variant_id,
+    body.data.stock_ids
+  )
+
   return {
     success: true,
     insertedCount: 0,
