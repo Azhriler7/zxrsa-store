@@ -1,6 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/invoice/QrisCountdownCard.vue
- DESKRIPSI: Komponen Lego Render Gambar QRIS Dinamis & Countdown Timer 10 Menit
+ DESKRIPSI: Komponen Lego QRIS Dinamis Berukuran Besar + Timer 5 Menit Desain
+            Mencolok + Fitur Download QRIS sebagai Gambar (.PNG).
 =========================================================================== -->
 <script setup lang="ts">
 import QRCode from 'qrcode'
@@ -16,84 +17,207 @@ const emit = defineEmits<{
   expired: []
 }>()
 
+const toast = useToast()
 const qrDataUrl = ref<string>('')
+const qrDownloadHiResUrl = ref<string>('')
 const remainingSeconds = ref<number>(0)
-
-// Generate gambar QRIS dari string payload dinamis
-watch(
-  () => props.qrisString,
-  async (val) => {
-    if (val) {
-      qrDataUrl.value = await QRCode.toDataURL(val, {
-        width: 280,
-        margin: 2
-      })
-    }
-  },
-  { immediate: true }
-)
+const isDownloading = ref(false)
 
 function updateRemainingTime() {
-  const diffMs = new Date(props.expiresAt).getTime() - Date.now()
-  const secs = Math.max(0, Math.floor(diffMs / 1000))
-  remainingSeconds.value = secs
-  if (secs === 0) {
+  const now = Date.now()
+  const exp = new Date(props.expiresAt).getTime()
+  const diff = Math.max(0, Math.floor((exp - now) / 1000))
+  remainingSeconds.value = diff
+
+  if (diff === 0) {
     emit('expired')
   }
 }
 
-onMounted(() => {
+const minutesFormatted = computed(() =>
+  Math.floor(remainingSeconds.value / 60).toString().padStart(2, '0')
+)
+
+const secondsFormatted = computed(() =>
+  (remainingSeconds.value % 60).toString().padStart(2, '0')
+)
+
+// Persentase progress bar dari total 5 menit (300 detik)
+const progressPercentage = computed(() => {
+  return Math.min(100, Math.max(0, Math.round((remainingSeconds.value / 300) * 100)))
+})
+
+async function renderQrisImages() {
+  if (!props.qrisString) return
+  try {
+    // 1. Gambar untuk tampilan layar (320px)
+    qrDataUrl.value = await QRCode.toDataURL(props.qrisString, {
+      width: 340,
+      margin: 2,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff'
+      }
+    })
+
+    // 2. Gambar Resolusi Tinggi (720px) khusus untuk fitur Download Gambar QRIS
+    qrDownloadHiResUrl.value = await QRCode.toDataURL(props.qrisString, {
+      width: 720,
+      margin: 4,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    })
+  } catch {
+    qrDataUrl.value = ''
+  }
+}
+
+onMounted(async () => {
   updateRemainingTime()
+  await renderQrisImages()
+})
+
+watch(() => props.qrisString, () => {
+  renderQrisImages()
 })
 
 useIntervalFn(() => {
   updateRemainingTime()
 }, 1000)
 
-const formattedTimer = computed(() => {
-  const mins = Math.floor(remainingSeconds.value / 60).toString().padStart(2, '0')
-  const secs = (remainingSeconds.value % 60).toString().padStart(2, '0')
-  return `${mins}:${secs}`
-})
+function downloadQrisAsImage() {
+  const targetUrl = qrDownloadHiResUrl.value || qrDataUrl.value
+  if (!targetUrl) return
+
+  isDownloading.value = true
+  try {
+    const link = document.createElement('a')
+    link.href = targetUrl
+    link.download = `QRIS-ZXRSA-${props.totalAmountFormatted.replace(/[^0-9]/g, '')}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    toast.add({
+      title: 'Gambar QRIS Berhasil Diunduh!',
+      description: 'Silakan buka aplikasi m-Banking / e-Wallet Anda lalu pilih menu Scan dari Galeri.',
+      color: 'success',
+      icon: 'i-lucide-download'
+    })
+  } finally {
+    isDownloading.value = false
+  }
+}
 </script>
 
 <template>
-  <UCard class="text-center border-2 border-primary/30 shadow-lg">
-    <template #header>
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold uppercase text-muted">Scan QRIS Dinamis</span>
-        <UBadge
-          color="warning"
-          variant="subtle"
-          icon="i-lucide-timer"
-        >
-          Kedaluwarsa dalam: {{ formattedTimer }}
-        </UBadge>
-      </div>
-    </template>
+  <UCard class="border-2 border-primary/50 shadow-xl overflow-hidden">
+    <div class="space-y-6 text-center">
+      <!-- BANNER COUNTDOWN TIMER 5 MENIT BESAR & MENCOLOK -->
+      <div
+        class="p-4 sm:p-5 rounded-2xl border-2 transition-colors space-y-3"
+        :class="
+          remainingSeconds <= 60
+            ? 'bg-error/10 border-error/50 text-error'
+            : 'bg-warning/10 border-warning/40 text-warning'
+        "
+      >
+        <div class="flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold uppercase tracking-wider">
+          <UIcon
+            name="i-lucide-timer"
+            class="w-5 h-5 animate-bounce"
+          />
+          <span>Batas Waktu Pembayaran QRIS (5 Menit)</span>
+        </div>
 
-    <div class="flex flex-col items-center space-y-4 py-2">
-      <div class="p-3 bg-white rounded-xl border border-default shadow-sm">
-        <img
-          v-if="qrDataUrl"
-          :src="qrDataUrl"
-          alt="QRIS Dynamic Code"
-          class="w-60 h-60 object-contain"
-        >
+        <!-- ANGKA DIGITAL BESAR -->
+        <div class="flex items-center justify-center gap-2 sm:gap-3 font-mono">
+          <div class="px-4 py-2.5 rounded-xl bg-default border border-default shadow-sm min-w-19">
+            <span class="text-3xl sm:text-4xl font-extrabold text-highlighted block leading-none">
+              {{ minutesFormatted }}
+            </span>
+            <span class="text-[10px] font-sans font-semibold text-muted uppercase mt-1 block">
+              Menit
+            </span>
+          </div>
+
+          <span class="text-3xl sm:text-4xl font-extrabold animate-pulse">:</span>
+
+          <div class="px-4 py-2.5 rounded-xl bg-default border border-default shadow-sm min-w-19">
+            <span class="text-3xl sm:text-4xl font-extrabold text-highlighted block leading-none">
+              {{ secondsFormatted }}
+            </span>
+            <span class="text-[10px] font-sans font-semibold text-muted uppercase mt-1 block">
+              Detik
+            </span>
+          </div>
+        </div>
+
+        <!-- PROGRESS BAR WAKTU TERSISA -->
+        <div class="w-full h-2 rounded-full bg-default overflow-hidden">
+          <div
+            class="h-full transition-all duration-1000 rounded-full"
+            :class="remainingSeconds <= 60 ? 'bg-error' : 'bg-warning'"
+            :style="{ width: `${progressPercentage}%` }"
+          />
+        </div>
       </div>
 
-      <div class="space-y-1">
-        <p class="text-xs text-muted">
-          Nominal Otomatis (Sudah Termasuk Kode Unik):
-        </p>
-        <p class="text-2xl font-extrabold font-mono text-primary">
+      <!-- AREA GAMBAR QRIS DINAMIS BERUKURAN BESAR -->
+      <div class="space-y-3">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold">
+          <UIcon
+            name="i-lucide-scan-line"
+            class="w-4 h-4"
+          />
+          <span>QRIS Dinamis Resmi • Nominal Otomatis</span>
+        </div>
+
+        <div class="mx-auto w-fit p-4 sm:p-5 bg-white rounded-2xl shadow-lg border-2 border-slate-200">
+          <img
+            v-if="qrDataUrl"
+            :src="qrDataUrl"
+            alt="QRIS Dinamis ZXRSA Store"
+            class="w-64 h-64 sm:w-72 sm:h-72 object-contain mx-auto"
+          >
+          <div
+            v-else
+            class="w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center text-xs text-slate-500"
+          >
+            Membuat Kode QRIS...
+          </div>
+        </div>
+      </div>
+
+      <!-- NOMINAL TOTAL BAYAR BESAR -->
+      <div class="p-4 rounded-xl bg-elevated border border-default space-y-1">
+        <span class="text-xs text-muted block font-medium">
+          Total Nominal yang Otomatis Terbaca Saat Scan:
+        </span>
+        <div class="text-2xl sm:text-3xl font-extrabold font-mono text-primary tracking-tight">
           {{ totalAmountFormatted }}
+        </div>
+        <p class="text-[11px] text-muted">
+          Penting: Jangan mengubah nominal di atas agar sistem memverifikasi lunas secara otomatis dalam 3 detik.
         </p>
       </div>
 
-      <p class="text-xs text-muted max-w-sm">
-        Buka aplikasi M-Banking atau E-Wallet Anda, scan kode QR di atas, dan halaman ini akan otomatis terbuka begitu pembayaran terdeteksi.
-      </p>
+      <!-- TOMBOL DOWNLOAD GAMBAR QRIS -->
+      <div class="pt-1">
+        <UButton
+          color="primary"
+          size="xl"
+          block
+          icon="i-lucide-download"
+          label="Download Gambar QRIS (.PNG)"
+          class="font-bold shadow-md"
+          :loading="isDownloading"
+          :disabled="!qrDataUrl"
+          @click="downloadQrisAsImage"
+        />
+      </div>
     </div>
   </UCard>
 </template>

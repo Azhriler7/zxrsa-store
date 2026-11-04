@@ -1,7 +1,6 @@
 <!-- ==========================================================================
  FILE: app/pages/admin/products.vue
- DESKRIPSI: Halaman Admin CRUD Produk (dengan Icon AppIconImage + USkeleton)
-            & Pengaturan Jadwal Promo Lengkap.
+ DESKRIPSI: Halaman Admin CRUD Produk & Paket (Deskripsi Tampil di Tiap Paket)
 =========================================================================== -->
 <script setup lang="ts">
 import type { ProductFormInitialData } from '~/components/admin/ProductFormModal.vue'
@@ -55,7 +54,6 @@ function openAddProduct() {
 function openEditProduct(prod: {
   id: string
   name: string
-  description: string | null
   usage_rules: string
   image_url: string | null
   promo_badge: string | null
@@ -74,6 +72,7 @@ function openAddVariant(productId: string, productName: string) {
     product_name: productName,
     name: '',
     duration: '30 Hari',
+    description: '',
     price: 20000,
     promo_price: null,
     promo_day_of_week: null,
@@ -91,6 +90,7 @@ function openEditVariant(productName: string, v: {
   product_id: string
   name: string
   duration: string
+  description: string | null
   price: number
   promo_price: number | null
   promo_day_of_week: string | null
@@ -118,7 +118,7 @@ function promptDeleteProduct(prod: {
   if (totalReadyStock > 0) {
     toast.add({
       title: 'Tidak Dapat Menghapus Produk!',
-      description: `Produk "${prod.name}" masih memiliki ${totalReadyStock} stok akun tersedia. Silakan kosongkan stok terlebih dahulu di menu Input Stok (.txt).`,
+      description: `Produk "${prod.name}" masih memiliki ${totalReadyStock} stok akun tersedia. Silakan kosongkan stok terlebih dahulu di menu Input Stok.`,
       color: 'error',
       icon: 'i-lucide-shield-alert'
     })
@@ -133,7 +133,7 @@ function promptDeleteVariant(v: { id: string, name: string, available_stock: num
   if (!v.is_custom_gmail && v.available_stock > 0) {
     toast.add({
       title: 'Tidak Dapat Menghapus Paket!',
-      description: `Paket "${v.name}" masih memiliki ${v.available_stock} stok akun tersedia. Kosongkan stok terlebih dahulu di menu Input Stok (.txt).`,
+      description: `Paket "${v.name}" masih memiliki ${v.available_stock} stok akun tersedia. Kosongkan stok terlebih dahulu di menu Input Stok sebelum menghapus paket.`,
       color: 'error',
       icon: 'i-lucide-shield-alert'
     })
@@ -185,7 +185,7 @@ function formatRupiah(val: number) {
           Manajemen Produk, Paket & Waktu Promo
         </h1>
         <p class="text-sm text-muted">
-          Kelola aplikasi premium beserta icon dari GitHub CDN, aturan garansi, dan jadwal promo harian/tanggal.
+          Kelola aplikasi premium beserta icon dari GitHub CDN, deskripsi tiap paket, dan jadwal promo harian/tanggal.
         </p>
       </div>
 
@@ -217,7 +217,6 @@ function formatRupiah(val: number) {
         <template #header>
           <div class="flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-3">
-              <!-- LEGO ICON APLIKASI DENGAN USKELETON PULSE & DEFAULT PLACEHOLDER -->
               <CommonAppIconImage
                 :src="prod.image_url"
                 :alt="prod.name"
@@ -247,7 +246,7 @@ function formatRupiah(val: number) {
                   </UBadge>
                 </div>
                 <p class="text-xs text-muted">
-                  {{ prod.description || 'Tanpa deskripsi tambahan' }}
+                  {{ prod.variants.length }} Varian Paket Terdaftar
                 </p>
               </div>
             </div>
@@ -297,7 +296,7 @@ function formatRupiah(val: number) {
             <thead>
               <tr class="border-b border-default text-xs text-muted uppercase">
                 <th class="py-2 px-3">
-                  Nama Paket
+                  Nama & Deskripsi Paket
                 </th>
                 <th class="py-2 px-3">
                   Durasi
@@ -324,13 +323,21 @@ function formatRupiah(val: number) {
                 v-for="v in prod.variants"
                 :key="v.id"
               >
-                <td class="py-2.5 px-3 font-medium text-highlighted">
-                  {{ v.name }}
+                <td class="py-2.5 px-3 max-w-xs">
+                  <div class="font-bold text-highlighted">
+                    {{ v.name }}
+                  </div>
+                  <p
+                    v-if="v.description"
+                    class="text-xs text-muted mt-0.5 line-clamp-2"
+                  >
+                    {{ v.description }}
+                  </p>
                 </td>
-                <td class="py-2.5 px-3 text-muted">
+                <td class="py-2.5 px-3 text-muted whitespace-nowrap">
                   {{ v.duration }}
                 </td>
-                <td class="py-2.5 px-3 font-mono">
+                <td class="py-2.5 px-3 font-mono whitespace-nowrap">
                   {{ formatRupiah(v.price) }}
                 </td>
                 <td class="py-2.5 px-3">
@@ -371,19 +378,19 @@ function formatRupiah(val: number) {
                     class="text-xs text-muted"
                   >OFF (Harga Normal)</span>
                 </td>
-                <td class="py-2.5 px-3">
+                <td class="py-2.5 px-3 whitespace-nowrap">
                   <UBadge
                     :color="v.is_custom_gmail ? 'warning' : 'primary'"
                     variant="subtle"
                     size="sm"
                   >
-                    {{ v.is_custom_gmail ? 'Custom Gmail' : 'Stok .txt Otomatis' }}
+                    {{ v.is_custom_gmail ? 'Custom Gmail' : 'Stok Otomatis' }}
                   </UBadge>
                 </td>
-                <td class="py-2.5 px-3 font-mono font-bold">
+                <td class="py-2.5 px-3 font-mono font-bold whitespace-nowrap">
                   {{ v.is_custom_gmail ? '∞ Manual' : `${v.available_stock} Akun` }}
                 </td>
-                <td class="py-2.5 px-3 text-right space-x-1">
+                <td class="py-2.5 px-3 text-right space-x-1 whitespace-nowrap">
                   <UButton
                     size="xs"
                     color="neutral"

@@ -62,10 +62,11 @@ export interface DbProductVariant {
   product_id: string
   name: string
   duration: string
-  price: number // Disimpan sebagai INTEGER (Rupiah penuh)
-  promo_price: number | null // Disimpan sebagai INTEGER (Rupiah penuh)
-  promo_day_of_week: DayOfWeek | null
-  promo_specific_date: string | null // 'MM-DD'
+  description: string | null
+  price: number
+  promo_price: number | null
+  promo_day_of_week: string | null
+  promo_specific_date: string | null
   promo_start_at: string | null
   promo_end_at: string | null
   is_custom_gmail: 0 | 1

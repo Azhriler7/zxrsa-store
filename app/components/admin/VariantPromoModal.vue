@@ -1,8 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/admin/VariantPromoModal.vue
- DESKRIPSI: Komponen Lego Modal CRUD Paket Varian dengan Master Switch Promo,
-            Promo Harian Berulang (Lingkaran S M T W T F S), Promo Tanggal
-            Spesifik, dan Validasi Tanggal Mulai >= Hari Ini.
+ DESKRIPSI: Komponen Lego Modal CRUD Paket Varian (Dilengkapi Deskripsi Paket,
+            Master Switch Promo, & Promo Harian Berulang).
 =========================================================================== -->
 <script setup lang="ts">
 export interface VariantModalInitialData {
@@ -11,6 +10,7 @@ export interface VariantModalInitialData {
   product_name?: string
   name: string
   duration: string
+  description?: string | null
   price: number
   promo_price: number | null
   promo_day_of_week?: string | null
@@ -29,7 +29,6 @@ const isOpen = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ saved: [] }>()
 const toast = useToast()
 
-// Daftar Hari untuk Promo Harian Berulang (0 = Sunday s/d 6 = Saturday)
 const weekDays = [
   { index: '0', short: 'S', full: 'Sunday (Minggu)' },
   { index: '1', short: 'M', full: 'Monday (Senin)' },
@@ -40,7 +39,6 @@ const weekDays = [
   { index: '6', short: 'S', full: 'Saturday (Sabtu)' }
 ]
 
-// Batas minimal input tanggal (Hari ini format YYYY-MM-DD dan YYYY-MM-DDTHH:mm)
 const minTodayDate = computed(() => {
   const now = new Date()
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
@@ -56,6 +54,7 @@ const minTodayDateTime = computed(() => {
 const state = reactive({
   name: '',
   duration: '30 Hari',
+  description: '',
   price: 20000,
   promo_price: null as number | null,
   promo_specific_date: '',
@@ -65,7 +64,6 @@ const state = reactive({
   is_active: true
 })
 
-// Toggle On/Off Master Promo & Sub-Mode Promo
 const isMasterPromoEnabled = ref(false)
 const enableRecurringDays = ref(false)
 const selectedDayIndices = ref<string[]>([])
@@ -78,6 +76,7 @@ watch(
     if (props.initialData) {
       state.name = props.initialData.name
       state.duration = props.initialData.duration
+      state.description = props.initialData.description || ''
       state.price = props.initialData.price
       state.promo_price = props.initialData.promo_price
       state.promo_specific_date = props.initialData.promo_specific_date || ''
@@ -86,7 +85,6 @@ watch(
       state.is_custom_gmail = props.initialData.is_custom_gmail
       state.is_active = props.initialData.is_active
 
-      // Set status switch berdasarkan data yang tersimpan
       isMasterPromoEnabled.value = Boolean(props.initialData.promo_price && props.initialData.promo_price > 0)
 
       const savedDays = (props.initialData.promo_day_of_week || '')
@@ -127,7 +125,6 @@ async function handleSaveVariant() {
     return
   }
 
-  // Validasi hanya jika Master Switch Promo sedang DINYALAKAN
   let finalPromoPrice: number | null = null
   let finalDayOfWeek: string | null = null
   let finalSpecificDate: string | null = null
@@ -192,6 +189,7 @@ async function handleSaveVariant() {
         product_id: props.initialData.product_id,
         name: state.name.trim(),
         duration: state.duration.trim(),
+        description: state.description.trim() || null,
         price: Math.floor(Number(state.price)),
         promo_price: finalPromoPrice,
         promo_day_of_week: finalDayOfWeek,
@@ -225,7 +223,7 @@ async function handleSaveVariant() {
   <UModal
     v-model:open="isOpen"
     :title="initialData?.id ? 'Edit Paket & Pengaturan Promo' : `Tambah Paket (${initialData?.product_name || ''})`"
-    description="Harga promo bersifat opsional. Gunakan tombol ON/OFF di bawah untuk mengatur jadwal promo."
+    description="Atur nama paket, deskripsi keuntungan paket, harga normal, serta jadwal promo."
   >
     <template #body>
       <div class="space-y-4">
@@ -253,6 +251,16 @@ async function handleSaveVariant() {
           </UFormField>
         </div>
 
+        <!-- DESKRIPSI KHUSUS TIAP PAKET -->
+        <UFormField label="Deskripsi Paket (Tampil di Bawah Nama Paket)">
+          <UTextarea
+            v-model="state.description"
+            :rows="2"
+            class="w-full"
+            placeholder="Contoh: Akun private 1 perangkat, bebas ekspor 4K tanpa watermark & full garansi."
+          />
+        </UFormField>
+
         <UFormField
           label="Harga Normal (Rp)"
           required
@@ -264,7 +272,6 @@ async function handleSaveVariant() {
           />
         </UFormField>
 
-        <!-- MASTER BUTTON ON/OFF PROMO -->
         <div class="p-4 rounded-xl border border-default bg-elevated/50 space-y-4">
           <div class="flex items-center justify-between gap-3">
             <div>
@@ -290,7 +297,6 @@ async function handleSaveVariant() {
             />
           </div>
 
-          <!-- PANEL PENGATURAN HARGA & JADWAL PROMO (MUNCUL SAAT PROMO ON) -->
           <div
             v-if="isMasterPromoEnabled"
             class="space-y-4 pt-3 border-t border-default"
@@ -307,7 +313,6 @@ async function handleSaveVariant() {
               />
             </UFormField>
 
-            <!-- OPSI 1: PROMO HARIAN BERULANG (S M T W T F S MELINGKAR) -->
             <div class="p-3 rounded-lg bg-default border border-default space-y-3">
               <div class="flex items-center justify-between">
                 <div>
@@ -353,7 +358,6 @@ async function handleSaveVariant() {
               </div>
             </div>
 
-            <!-- OPSI 2: PROMO TANGGAL SPESIFIK (MISAL 1 AGUSTUS / TANGGAL KEMBAR) -->
             <div class="p-3 rounded-lg bg-default border border-default space-y-2.5">
               <div class="flex items-center justify-between">
                 <div>
@@ -383,7 +387,6 @@ async function handleSaveVariant() {
               </div>
             </div>
 
-            <!-- OPSI 3: PROMO RENTANG TANGGAL & WAKTU (MULAI >= HARI INI) -->
             <div class="p-3 rounded-lg bg-default border border-default space-y-2.5">
               <div class="flex items-center justify-between">
                 <div>
@@ -426,10 +429,6 @@ async function handleSaveVariant() {
                 </UFormField>
               </div>
             </div>
-
-            <p class="text-[11px] text-muted italic">
-              *Tip: Jika ketiga jadwal di atas dibiarkan OFF sementara tombol utama PROMO NYALA (ON), maka Harga Promo akan aktif terus setiap hari.
-            </p>
           </div>
         </div>
 

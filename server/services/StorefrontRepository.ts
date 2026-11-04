@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: server/services/StorefrontRepository.ts
-// DESKRIPSI: Repository OOP untuk Katalog Publik (dengan Icon Produk & Jadwal
-//            Promo Multi-Mode), Atomic Stock Locking, & Dynamic Invoice.
+// DESKRIPSI: Repository OOP Katalog Publik (Deskripsi per Paket), Timer Kunci
+//            Stok 5 Menit, dan Query Invoice Eksplisit Anti-Error 500.
 // ============================================================================
 
 import type { DbProduct, DbProductVariant, TransactionStatus } from '../types/database'
@@ -17,6 +17,7 @@ export interface PublicVariantItem {
   product_id: string
   name: string
   duration: string
+  description: string | null
   original_price: number
   effective_price: number
   is_promo_active: boolean
@@ -28,7 +29,6 @@ export interface PublicProductCatalog {
   id: string
   name: string
   slug: string
-  description: string | null
   usage_rules: string
   image_url: string | null
   promo_badge: string | null
@@ -57,35 +57,27 @@ export class StorefrontRepository extends BaseRepository {
       .run()
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: CEK JADWAL PROMO (HARIAN BERULANG / TANGGAL SPESIFIK / RENTANG)]
-  // Menggunakan zona waktu WIB (UTC+7) agar akurat dengan waktu Indonesia
-  // --------------------------------------------------------------------------
   private isPromoCurrentlyActive(variant: DbProductVariant): boolean {
     if (!variant.promo_price || variant.promo_price <= 0 || variant.promo_price >= variant.price) {
       return false
     }
 
     const nowUtc = new Date()
-    // Konversi ke waktu WIB (UTC+7) untuk pengecekan hari & tanggal lokal Indonesia
     const wibDate = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000)
-    const currentDayIndex = String(wibDate.getUTCDay()) // '0' (Minggu) s/d '6' (Sabtu)
-    const currentYmd = wibDate.toISOString().slice(0, 10) // 'YYYY-MM-DD'
-    const currentMonthDay = currentYmd.slice(5, 10) // 'MM-DD' (misal '08-01' untuk 1 Agustus)
+    const currentDayIndex = String(wibDate.getUTCDay())
+    const currentYmd = wibDate.toISOString().slice(0, 10)
+    const currentMonthDay = currentYmd.slice(5, 10)
 
     const hasRecurringDayRule = Boolean(variant.promo_day_of_week && variant.promo_day_of_week.trim() !== '')
     const hasSpecificDateRule = Boolean(variant.promo_specific_date && variant.promo_specific_date.trim() !== '')
     const hasRangeRule = Boolean(variant.promo_start_at || variant.promo_end_at)
 
-    // Jika Admin menyalakan Harga Promo tanpa membatasi hari/tanggal, berarti promo menyala terus
     if (!hasRecurringDayRule && !hasSpecificDateRule && !hasRangeRule) {
       return true
     }
 
-    // Jika ada salah satu jadwal yang dinyalakan, cek apakah hari/jam sekarang memenuhi salah satu jadwal yang aktif:
     let matchedAnyActiveSchedule = false
 
-    // 1. Cek Promo Harian Berulang (misal '5' untuk Jumat, atau '0,5,6' untuk Minggu, Jumat, Sabtu)
     if (hasRecurringDayRule) {
       const activeDays = (variant.promo_day_of_week || '').split(',').map(d => d.trim())
       if (activeDays.includes(currentDayIndex)) {
@@ -93,7 +85,6 @@ export class StorefrontRepository extends BaseRepository {
       }
     }
 
-    // 2. Cek Promo Tanggal Spesifik (bisa format 'YYYY-MM-DD' atau 'MM-DD' seperti 1 Agustus)
     if (hasSpecificDateRule) {
       const targetDate = (variant.promo_specific_date || '').trim()
       if (targetDate === currentYmd || targetDate.slice(-5) === currentMonthDay) {
@@ -101,7 +92,6 @@ export class StorefrontRepository extends BaseRepository {
       }
     }
 
-    // 3. Cek Promo Rentang Tanggal/Waktu (Start s/d End)
     if (hasRangeRule) {
       const afterStart = variant.promo_start_at ? nowUtc >= new Date(variant.promo_start_at) : true
       const beforeEnd = variant.promo_end_at ? nowUtc <= new Date(variant.promo_end_at) : true
@@ -137,7 +127,6 @@ export class StorefrontRepository extends BaseRepository {
       id: prod.id,
       name: prod.name,
       slug: prod.slug,
-      description: prod.description,
       usage_rules: prod.usage_rules,
       image_url: prod.image_url,
       promo_badge: prod.promo_badge,
@@ -150,6 +139,7 @@ export class StorefrontRepository extends BaseRepository {
             product_id: v.product_id,
             name: v.name,
             duration: v.duration,
+            description: v.description || null,
             original_price: v.price,
             effective_price: promoActive && v.promo_price ? v.promo_price : v.price,
             is_promo_active: promoActive,
@@ -160,6 +150,9 @@ export class StorefrontRepository extends BaseRepository {
     }))
   }
 
+  // --------------------------------------------------------------------------
+  // [SECTION: CREATE CHECKOUT INVOICE (TIMER DIUBAH MENJADI 5 MENIT)]
+  // --------------------------------------------------------------------------
   public async createCheckoutInvoice(payload: {
     variantId: string
     customerEmail: string
@@ -190,7 +183,8 @@ export class StorefrontRepository extends BaseRepository {
       })
     }
 
-    const expiresDate = new Date(Date.now() + 10 * 60 * 1000)
+    // TIMER PEMBAYARAN QRIS & KUNCI STOK: 5 MENIT
+    const expiresDate = new Date(Date.now() + 5 * 60 * 1000)
     const expiresIso = expiresDate.toISOString()
 
     let lockedStockId: number | null = null
@@ -269,22 +263,41 @@ export class StorefrontRepository extends BaseRepository {
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: GET INVOICE BY TOKEN (SAFE LEFT JOIN — ANTI 404 DARI GMAIL)]
-  // Tetap menampilkan halaman Invoice meskipun produk/paket pernah di-reset/edit
+  // [SECTION: GET INVOICE BY TOKEN (EKSPLISIT KOLOM & ANTI-ERROR 500)]
   // --------------------------------------------------------------------------
   public async getInvoiceByToken(token: string) {
-    await this.releaseExpiredLocks()
+    try {
+      await this.releaseExpiredLocks()
+    } catch {
+      // Abaikan jika lock release gagal agar pembacaan invoice tidak pernah 500
+    }
 
-    const cleanToken = decodeURIComponent(token).trim()
+    const cleanToken = decodeURIComponent(token || '').trim()
 
     const tx = await this.db
       .prepare(
         `SELECT 
-           t.*,
+           t.id,
+           t.invoice_token,
+           t.customer_email,
+           t.custom_gmail_account,
+           t.variant_id,
+           t.account_stock_id,
+           t.base_amount,
+           t.unique_code,
+           t.total_amount,
+           t.status,
+           t.custom_gmail_status,
+           t.qris_dynamic_string,
+           t.delivered_account_data,
+           t.expires_at,
+           t.paid_at,
+           t.created_at,
            COALESCE(p.name, 'Aplikasi Premium ZXRSA') as product_name,
            COALESCE(p.usage_rules, '1. Dilarang mengubah password akun.\n2. Garansi penuh sesuai durasi paket.') as usage_rules,
            COALESCE(pv.name, 'Paket Premium') as variant_name,
            COALESCE(pv.duration, '30 Hari') as duration,
+           pv.description as variant_description,
            COALESCE(pv.is_custom_gmail, CASE WHEN t.custom_gmail_account IS NOT NULL THEN 1 ELSE 0 END) as is_custom_gmail
          FROM transactions t
          LEFT JOIN product_variants pv ON pv.id = t.variant_id
@@ -294,6 +307,7 @@ export class StorefrontRepository extends BaseRepository {
       )
       .bind(cleanToken)
       .first<AdminTransactionRow & {
+        variant_description: string | null
         qris_dynamic_string: string | null
         delivered_account_data: string | null
       }>()
@@ -301,7 +315,7 @@ export class StorefrontRepository extends BaseRepository {
     if (!tx) {
       throw createError({
         statusCode: 404,
-        statusMessage: 'Invoice tidak ditemukan di database Production atau berasal dari transaksi sebelum database di-reset.'
+        statusMessage: 'Invoice tidak ditemukan di database.'
       })
     }
 
@@ -311,7 +325,7 @@ export class StorefrontRepository extends BaseRepository {
       extraInfoLink: string | null
     } | null = null
 
-    if (tx.status === 'lunas' && tx.is_custom_gmail === 0 && tx.delivered_account_data) {
+    if (tx.status === 'lunas' && Number(tx.is_custom_gmail) === 0 && tx.delivered_account_data) {
       try {
         const config = useRuntimeConfig(this.event)
         const cryptoService = new CryptoService(config.encryptionKey)
@@ -324,10 +338,12 @@ export class StorefrontRepository extends BaseRepository {
           extraInfoLink: parsed.extraInfoLink
         }
       } catch {
+        // Fallback jika data sudah plaintext atau kunci berbeda
+        const fallbackParsed = new StockParserService().parseSingleDecryptedString(tx.delivered_account_data)
         decryptedAccount = {
-          email: 'Hubungi Admin via WhatsApp',
-          password: 'Data terenkripsi dengan kunci berbeda',
-          extraInfoLink: null
+          email: fallbackParsed.email,
+          password: fallbackParsed.password,
+          extraInfoLink: fallbackParsed.extraInfoLink
         }
       }
     }
@@ -350,13 +366,14 @@ export class StorefrontRepository extends BaseRepository {
       custom_gmail_account: tx.custom_gmail_account,
       product_name: tx.product_name,
       variant_name: tx.variant_name,
+      variant_description: tx.variant_description || null,
       duration: tx.duration,
       usage_rules: tx.usage_rules,
       is_custom_gmail: Number(tx.is_custom_gmail) === 1,
       custom_gmail_status: tx.custom_gmail_status,
-      base_amount: tx.base_amount,
-      unique_code: tx.unique_code,
-      total_amount: tx.total_amount,
+      base_amount: Number(tx.base_amount || 0),
+      unique_code: Number(tx.unique_code || 0),
+      total_amount: Number(tx.total_amount || 0),
       status: tx.status as TransactionStatus,
       qris_dynamic_string: tx.qris_dynamic_string || '',
       expires_at: tx.expires_at,

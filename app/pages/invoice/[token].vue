@@ -1,15 +1,18 @@
 <!-- ==========================================================================
  FILE: app/pages/invoice/[token].vue
- DESKRIPSI: Halaman Dynamic Invoice Pembeli (Header Logo /logo.png + Tombol
-            Kembali, Anti-Crash 404, & Responsif Desktop/Mobile).
+ DESKRIPSI: Halaman Dynamic Invoice Pembeli (Anti-Error 500 SSR Saat Dibuka
+            dari Link Gmail, Timer 5 Menit, & Download Gambar QRIS).
 =========================================================================== -->
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
 
 const route = useRoute()
-const token = String(route.params.token || '')
+const token = computed(() => String(route.params.token || '').trim())
 
-const { data, error, refresh } = await useFetch(`/api/store/invoice/${token}`)
+const { data, status, error, refresh } = await useFetch(() => `/api/store/invoice/${token.value}`, {
+  retry: 1
+})
+
 const { saveInvoiceSession } = useActiveInvoiceSession()
 
 useSeoMeta({
@@ -83,9 +86,18 @@ function formatRupiah(val: number) {
     </header>
 
     <main class="flex-1 py-8 sm:py-12">
-      <!-- JIKA TOKEN INVOICE LAMA SUDAH TERHAPUS SAAT RESET DATABASE -->
+      <!-- LOADING SKELETON -->
       <UContainer
-        v-if="error || !data?.invoice"
+        v-if="status === 'pending' && !data?.invoice"
+        class="max-w-2xl space-y-4"
+      >
+        <USkeleton class="h-24 w-full rounded-2xl animate-pulse" />
+        <USkeleton class="h-96 w-full rounded-2xl animate-pulse" />
+      </UContainer>
+
+      <!-- JIKA TOKEN INVOICE TIDAK DITEMUKAN -->
+      <UContainer
+        v-else-if="error || !data?.invoice"
         class="max-w-xl"
       >
         <UCard class="text-center py-10 space-y-4">
@@ -98,7 +110,7 @@ function formatRupiah(val: number) {
               Data Invoice Tidak Ditemukan
             </h1>
             <p class="text-xs text-muted leading-relaxed max-w-md mx-auto">
-              Link invoice ini mungkin berasal dari transaksi lama sebelum pembaruan database, atau kode token tidak lengkap. Silakan buat pesanan baru di halaman utama.
+              Link invoice ini mungkin berasal dari transaksi lama sebelum database di-reset, atau kode token tidak lengkap. Silakan buat pesanan baru di halaman utama.
             </p>
           </div>
           <UButton
@@ -113,7 +125,7 @@ function formatRupiah(val: number) {
       <!-- TAMPILAN INVOICE VERTIKAL-LINEAR -->
       <UContainer
         v-else
-        class="max-w-3xl space-y-6"
+        class="max-w-2xl space-y-6"
       >
         <UCard>
           <div class="flex flex-wrap items-center justify-between gap-4">
@@ -151,14 +163,20 @@ function formatRupiah(val: number) {
           </div>
         </UCard>
 
-        <!-- BAGIAN UTAMA: QRIS ATAU KREDENSIAL AKUN -->
-        <InvoiceQrisCountdownCard
-          v-if="data.invoice.status === 'pending'"
-          :qris-string="data.invoice.qris_dynamic_string"
-          :expires-at="data.invoice.expires_at"
-          :total-amount-formatted="formatRupiah(data.invoice.total_amount)"
-          @expired="refresh()"
-        />
+        <!-- BAGIAN UTAMA: QRIS (CLIENT-ONLY AGAR TIDAK PERNAH ERROR 500 SAAT SSR DARI GMAIL) ATAU KREDENSIAL AKUN -->
+        <ClientOnly v-if="data.invoice.status === 'pending'">
+          <InvoiceQrisCountdownCard
+            :qris-string="data.invoice.qris_dynamic_string"
+            :expires-at="data.invoice.expires_at"
+            :total-amount-formatted="formatRupiah(data.invoice.total_amount)"
+            @expired="refresh()"
+          />
+          <template #fallback>
+            <UCard class="py-12 text-center">
+              <USkeleton class="w-64 h-64 mx-auto rounded-2xl animate-pulse" />
+            </UCard>
+          </template>
+        </ClientOnly>
 
         <InvoiceCredentialDeliverCard
           v-else-if="data.invoice.status === 'lunas'"
@@ -181,7 +199,7 @@ function formatRupiah(val: number) {
               Transaksi {{ data.invoice.status.toUpperCase() }}
             </h2>
             <p class="text-xs text-muted">
-              Batas waktu pembayaran QRIS 10 menit telah berakhir atau pesanan dibatalkan.
+              Batas waktu pembayaran QRIS 5 menit telah berakhir atau pesanan dibatalkan.
             </p>
           </div>
           <UButton
@@ -192,7 +210,7 @@ function formatRupiah(val: number) {
           />
         </UCard>
 
-        <!-- RINCIAN PESANAN & ATURAN GARANSI (VERTICAL STACK) -->
+        <!-- RINCIAN PESANAN & ATURAN GARANSI -->
         <UCard>
           <template #header>
             <h2 class="text-xs font-bold text-highlighted uppercase tracking-wider">
@@ -208,6 +226,13 @@ function formatRupiah(val: number) {
             <div class="flex justify-between gap-2">
               <span class="text-muted">Paket & Durasi:</span>
               <span class="font-medium text-right">{{ data.invoice.variant_name }} ({{ data.invoice.duration }})</span>
+            </div>
+            <div
+              v-if="data.invoice.variant_description"
+              class="flex justify-between gap-2"
+            >
+              <span class="text-muted">Deskripsi Paket:</span>
+              <span class="text-xs text-muted text-right max-w-xs">{{ data.invoice.variant_description }}</span>
             </div>
             <div
               v-if="data.invoice.is_custom_gmail"
