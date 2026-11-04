@@ -1,81 +1,105 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/StickyNavbar.vue
- DESKRIPSI: Komponen Lego Sticky Navbar dengan fitur Smooth Scroll ke Section
+ DESKRIPSI: Sticky Navbar Modern SaaS dengan Logo /logo.png & Menu Mobile
 =========================================================================== -->
 <script setup lang="ts">
-const route = useRoute()
-const router = useRouter()
+const isMobileNavOpen = ref(false)
 
-const navSections = [
-  { label: 'Beranda', id: 'hero-section', icon: 'i-lucide-sparkles' },
-  { label: 'Pilih Paket', id: 'pilih-paket', icon: 'i-lucide-shopping-bag' },
-  { label: 'Testimoni', id: 'testimoni', icon: 'i-lucide-message-square-heart' },
-  { label: 'FAQ', id: 'faq', icon: 'i-lucide-circle-help' },
-  { label: 'Kontak', id: 'kontak', icon: 'i-lucide-headset' }
+const navLinks = [
+  { label: 'Beranda', href: '#beranda' },
+  { label: 'Katalog & Paket', href: '#pilih-paket' },
+  { label: 'Testimoni', href: '#testimoni' },
+  { label: 'FAQ', href: '#faq' },
+  { label: 'Kontak', href: '#kontak' }
 ]
-
-// Smooth scroll tanpa menghalangi judul section (diimbangi scroll-mt-20 di section)
-async function scrollToSection(sectionId: string) {
-  if (route.path !== '/') {
-    await router.push('/')
-  }
-  const el = document.getElementById(sectionId)
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-}
 </script>
 
 <template>
-  <header class="sticky top-0 z-40 h-16 w-full backdrop-blur-md bg-default/85 border-b border-default">
-    <UContainer class="h-full flex items-center justify-between gap-4">
-      <!-- LOGO BRAND -->
-      <button
-        type="button"
-        class="flex items-center gap-2.5 text-left cursor-pointer focus:outline-none"
-        @click="scrollToSection('hero-section')"
+  <header class="sticky top-0 z-40 w-full backdrop-blur-xl bg-default/80 border-b border-default/80 transition-colors">
+    <UContainer class="h-16 flex items-center justify-between gap-4">
+      <!-- BRAND LOGO DARI /logo.png -->
+      <a
+        href="#beranda"
+        class="flex items-center gap-3 group focus:outline-none"
       >
-        <div class="p-2 rounded-xl bg-primary text-white shadow-sm">
-          <UIcon
-            name="i-lucide-zap"
-            class="w-5 h-5"
-          />
-        </div>
-        <div>
-          <span class="font-extrabold text-base text-highlighted tracking-tight block leading-none">
-            ZXRSA STORE
+        <img
+          src="/logo.png"
+          alt="ZXRSA Store"
+          class="w-9 h-9 rounded-xl object-contain bg-elevated border border-default p-0.5 shadow-xs group-hover:scale-105 transition-transform"
+        >
+        <div class="flex flex-col">
+          <span class="font-extrabold text-base tracking-tight text-highlighted leading-none">
+            ZXRSA<span class="text-primary">.STORE</span>
           </span>
-          <span class="text-[11px] text-muted">
-            Instant Premium App Accounts
+          <span class="text-[10px] font-medium text-muted tracking-wider uppercase mt-0.5">
+            Automated Digital SaaS
           </span>
         </div>
-      </button>
+      </a>
 
-      <!-- MENU SMOOTH SCROLL DESKTOP -->
-      <nav class="hidden md:flex items-center gap-1">
+      <!-- DESKTOP NAVIGATION LINKS -->
+      <nav class="hidden md:flex items-center gap-1 rounded-full border border-default bg-elevated/60 px-2 py-1">
+        <a
+          v-for="item in navLinks"
+          :key="item.href"
+          :href="item.href"
+          class="px-3.5 py-1.5 rounded-full text-xs font-semibold text-muted hover:text-highlighted hover:bg-default transition-all"
+        >
+          {{ item.label }}
+        </a>
+      </nav>
+
+      <!-- ACTION BUTTONS (DESKTOP & MOBILE) -->
+      <div class="flex items-center gap-2">
+        <UColorModeButton size="sm" />
+
         <UButton
-          v-for="sec in navSections"
-          :key="sec.id"
+          href="#pilih-paket"
+          color="primary"
+          size="sm"
+          icon="i-lucide-zap"
+          label="Beli Instan"
+          class="hidden sm:inline-flex font-semibold rounded-lg shadow-xs"
+        />
+
+        <!-- TOMBOL HAMBURGER KHUSUS LAYAR HP -->
+        <UButton
           color="neutral"
           variant="ghost"
           size="sm"
-          :icon="sec.icon"
-          :label="sec.label"
-          @click="scrollToSection(sec.id)"
-        />
-      </nav>
-
-      <!-- ACTION KANAN -->
-      <div class="flex items-center gap-2">
-        <UColorModeButton size="sm" />
-        <UButton
-          color="primary"
-          size="sm"
-          icon="i-lucide-shopping-cart"
-          label="Beli Sekarang"
-          @click="scrollToSection('pilih-paket')"
+          :icon="isMobileNavOpen ? 'i-lucide-x' : 'i-lucide-menu'"
+          class="md:hidden"
+          aria-label="Toggle Menu"
+          @click="isMobileNavOpen = !isMobileNavOpen"
         />
       </div>
     </UContainer>
+
+    <!-- DROPDOWN MENU MOBILE (RESPONSIF UNTUK LAYAR HP) -->
+    <div
+      v-if="isMobileNavOpen"
+      class="md:hidden border-t border-default bg-default/95 backdrop-blur-xl px-4 py-4 space-y-3"
+    >
+      <nav class="flex flex-col space-y-1">
+        <a
+          v-for="item in navLinks"
+          :key="item.href"
+          :href="item.href"
+          class="px-3 py-2.5 rounded-lg text-sm font-semibold text-highlighted hover:bg-elevated transition-colors"
+          @click="isMobileNavOpen = false"
+        >
+          {{ item.label }}
+        </a>
+      </nav>
+      <UButton
+        href="#pilih-paket"
+        color="primary"
+        block
+        size="md"
+        icon="i-lucide-zap"
+        label="Pilih Paket Sekarang"
+        @click="isMobileNavOpen = false"
+      />
+    </div>
   </header>
 </template>

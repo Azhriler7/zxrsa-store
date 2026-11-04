@@ -268,21 +268,31 @@ export class StorefrontRepository extends BaseRepository {
     return { invoiceId, invoiceToken }
   }
 
+  // --------------------------------------------------------------------------
+  // [SECTION: GET INVOICE BY TOKEN (SAFE LEFT JOIN — ANTI 404 DARI GMAIL)]
+  // Tetap menampilkan halaman Invoice meskipun produk/paket pernah di-reset/edit
+  // --------------------------------------------------------------------------
   public async getInvoiceByToken(token: string) {
     await this.releaseExpiredLocks()
+
+    const cleanToken = decodeURIComponent(token).trim()
 
     const tx = await this.db
       .prepare(
         `SELECT 
-           t.*, p.name as product_name, p.usage_rules,
-           pv.name as variant_name, pv.duration, pv.is_custom_gmail
+           t.*,
+           COALESCE(p.name, 'Aplikasi Premium ZXRSA') as product_name,
+           COALESCE(p.usage_rules, '1. Dilarang mengubah password akun.\n2. Garansi penuh sesuai durasi paket.') as usage_rules,
+           COALESCE(pv.name, 'Paket Premium') as variant_name,
+           COALESCE(pv.duration, '30 Hari') as duration,
+           COALESCE(pv.is_custom_gmail, CASE WHEN t.custom_gmail_account IS NOT NULL THEN 1 ELSE 0 END) as is_custom_gmail
          FROM transactions t
-         JOIN product_variants pv ON pv.id = t.variant_id
-         JOIN products p ON p.id = pv.product_id
-         WHERE t.invoice_token = ?1
+         LEFT JOIN product_variants pv ON pv.id = t.variant_id
+         LEFT JOIN products p ON p.id = pv.product_id
+         WHERE TRIM(t.invoice_token) = ?1 OR TRIM(t.id) = ?1
          LIMIT 1`
       )
-      .bind(token)
+      .bind(cleanToken)
       .first<AdminTransactionRow & {
         qris_dynamic_string: string | null
         delivered_account_data: string | null
@@ -291,7 +301,7 @@ export class StorefrontRepository extends BaseRepository {
     if (!tx) {
       throw createError({
         statusCode: 404,
-        statusMessage: 'Invoice tidak ditemukan atau token tidak sah.'
+        statusMessage: 'Invoice tidak ditemukan di database Production atau berasal dari transaksi sebelum database di-reset.'
       })
     }
 
@@ -302,22 +312,36 @@ export class StorefrontRepository extends BaseRepository {
     } | null = null
 
     if (tx.status === 'lunas' && tx.is_custom_gmail === 0 && tx.delivered_account_data) {
-      const config = useRuntimeConfig(this.event)
-      const cryptoService = new CryptoService(config.encryptionKey)
-      const rawPlain = await cryptoService.decryptAccountData(tx.delivered_account_data)
-      const parsed = new StockParserService().parseSingleDecryptedString(rawPlain)
+      try {
+        const config = useRuntimeConfig(this.event)
+        const cryptoService = new CryptoService(config.encryptionKey)
+        const rawPlain = await cryptoService.decryptAccountData(tx.delivered_account_data)
+        const parsed = new StockParserService().parseSingleDecryptedString(rawPlain)
 
-      decryptedAccount = {
-        email: parsed.email,
-        password: parsed.password,
-        extraInfoLink: parsed.extraInfoLink
+        decryptedAccount = {
+          email: parsed.email,
+          password: parsed.password,
+          extraInfoLink: parsed.extraInfoLink
+        }
+      } catch {
+        decryptedAccount = {
+          email: 'Hubungi Admin via WhatsApp',
+          password: 'Data terenkripsi dengan kunci berbeda',
+          extraInfoLink: null
+        }
       }
     }
 
-    const reviewRow = await this.db
-      .prepare('SELECT id FROM testimonials WHERE transaction_id = ?1 LIMIT 1')
-      .bind(tx.id)
-      .first<{ id: string }>()
+    let hasReviewed: boolean
+    try {
+      const reviewRow = await this.db
+        .prepare('SELECT id FROM testimonials WHERE transaction_id = ?1 LIMIT 1')
+        .bind(tx.id)
+        .first<{ id: string }>()
+      hasReviewed = Boolean(reviewRow)
+    } catch {
+      hasReviewed = false
+    }
 
     return {
       id: tx.id,
@@ -328,7 +352,7 @@ export class StorefrontRepository extends BaseRepository {
       variant_name: tx.variant_name,
       duration: tx.duration,
       usage_rules: tx.usage_rules,
-      is_custom_gmail: tx.is_custom_gmail === 1,
+      is_custom_gmail: Number(tx.is_custom_gmail) === 1,
       custom_gmail_status: tx.custom_gmail_status,
       base_amount: tx.base_amount,
       unique_code: tx.unique_code,
@@ -339,7 +363,7 @@ export class StorefrontRepository extends BaseRepository {
       paid_at: tx.paid_at,
       created_at: tx.created_at,
       delivered_account: decryptedAccount,
-      has_reviewed: Boolean(reviewRow)
+      has_reviewed: hasReviewed
     }
   }
 

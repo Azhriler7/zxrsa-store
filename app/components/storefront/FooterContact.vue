@@ -1,63 +1,60 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/FooterContact.vue
- DESKRIPSI: Komponen Lego Kontak & Footer Terpadu
+ DESKRIPSI: Footer & Kontak Resmi ZXRSA Store dengan Logo /logo.png
 =========================================================================== -->
 <script setup lang="ts">
 const config = useRuntimeConfig()
+const waUrl = computed(() => `https://wa.me/${config.public.whatsappNumber}`)
 </script>
 
 <template>
   <footer
     id="kontak"
-    class="scroll-mt-20 border-t border-default bg-elevated/60 py-12"
+    class="scroll-mt-20 border-t border-default bg-elevated/40 py-14"
   >
-    <UContainer class="grid grid-cols-1 md:grid-cols-3 gap-8">
-      <div class="space-y-3">
-        <div class="flex items-center gap-2">
-          <UIcon
-            name="i-lucide-zap"
-            class="w-5 h-5 text-primary"
-          />
-          <span class="font-extrabold text-lg text-highlighted">ZXRSA STORE</span>
+    <UContainer class="max-w-3xl space-y-8 text-center">
+      <!-- BRAND LOGO /logo.png -->
+      <div class="flex flex-col items-center space-y-3">
+        <img
+          src="/logo.png"
+          alt="ZXRSA Store Logo"
+          class="w-12 h-12 rounded-2xl object-contain bg-default border border-default p-1 shadow-xs"
+        >
+        <div class="space-y-1">
+          <span class="font-extrabold text-lg text-highlighted tracking-tight block">
+            ZXRSA<span class="text-primary">.STORE</span>
+          </span>
+          <p class="text-xs sm:text-sm text-muted max-w-md mx-auto leading-relaxed">
+            Layanan penjualan akun aplikasi premium otomatis 24 jam dengan sistem pembayaran QRIS Dinamis dan enkripsi stok tingkat lanjut.
+          </p>
         </div>
-        <p class="text-xs text-muted leading-relaxed">
-          Platform penyedia layanan akun aplikasi premium otomatis dengan sistem keamanan enkripsi AES-256-GCM dan validasi pembayaran QRIS Dinamis.
-        </p>
       </div>
 
-      <div class="space-y-2">
-        <h3 class="text-sm font-bold text-highlighted uppercase tracking-wider">
-          Jam Operasional & Layanan
-        </h3>
-        <p class="text-xs text-muted">
-          • Pengiriman Akun Stok: <strong>Otomatis 24 Jam Nonstop</strong>
-        </p>
-        <p class="text-xs text-muted">
-          • Konfirmasi Custom Gmail & CS: <strong>08.00 – 22.00 WIB</strong>
-        </p>
-      </div>
-
-      <div class="space-y-3">
-        <h3 class="text-sm font-bold text-highlighted uppercase tracking-wider">
-          Hubungi Kami
-        </h3>
-        <p class="text-xs text-muted">
-          Butuh bantuan kendala pembayaran atau klaim garansi? Hubungi WhatsApp resmi kami:
-        </p>
+      <!-- CONTACT CTA LINEAR BAR -->
+      <div class="flex flex-wrap items-center justify-center gap-3">
         <UButton
-          :to="`https://wa.me/${config.public.whatsappNumber}`"
+          :to="waUrl"
           target="_blank"
           color="success"
           variant="subtle"
+          size="md"
           icon="i-lucide-message-circle"
-          :label="`WhatsApp: +${config.public.whatsappNumber}`"
-          size="sm"
+          label="Hubungi WhatsApp CS Resmi"
+        />
+        <UButton
+          href="#pilih-paket"
+          color="neutral"
+          variant="outline"
+          size="md"
+          icon="i-lucide-arrow-up"
+          label="Kembali ke Katalog Paket"
         />
       </div>
-    </UContainer>
 
-    <UContainer class="mt-8 pt-6 border-t border-default text-center text-xs text-muted">
-      © {{ new Date().getFullYear() }} ZXRSA Store. All rights reserved.
+      <div class="pt-6 border-t border-default flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted">
+        <span>© {{ new Date().getFullYear() }} ZXRSA Store. Seluruh hak cipta dilindungi.</span>
+        <span class="font-mono">Secured by AES-256-GCM & Cloudflare Edge</span>
+      </div>
     </UContainer>
   </footer>
 </template>

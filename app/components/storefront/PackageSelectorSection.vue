@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/PackageSelectorSection.vue
- DESKRIPSI: Komponen Lego Pilih Paket (Menampilkan Icon Aplikasi dengan
-            USkeleton Berdenyut & Default Placeholder Otomatis).
+ DESKRIPSI: Komponen Lego Pilih Paket dengan Desain Vertical-Linear SaaS
+            (Tanpa Bento Grid, 100% Dinamis, USkeleton Icon, & Responsif).
 =========================================================================== -->
 <script setup lang="ts">
 import { z } from 'zod'
@@ -17,6 +17,17 @@ const toast = useToast()
 const selectedProductId = ref<string>(props.catalog[0]?.id || '')
 const selectedVariant = ref<PublicVariantItem | null>(null)
 
+// Jaga agar selectedProductId selalu sinkron jika data catalog baru selesai dimuat secara dinamis
+watch(
+  () => props.catalog,
+  (newCatalog) => {
+    if (!selectedProductId.value && newCatalog.length > 0 && newCatalog[0]) {
+      selectedProductId.value = newCatalog[0].id
+    }
+  },
+  { immediate: true }
+)
+
 const currentProduct = computed(() =>
   props.catalog.find(p => p.id === selectedProductId.value) || props.catalog[0] || null
 )
@@ -26,11 +37,11 @@ function selectProduct(prodId: string) {
   selectedVariant.value = null
 }
 
-function selectVariantCard(variant: PublicVariantItem) {
+function selectVariantRow(variant: PublicVariantItem) {
   if (variant.available_stock <= 0) {
     toast.add({
-      title: 'Stok Habis',
-      description: 'Maaf, stok untuk paket ini sedang kosong. Silakan pilih paket lain.',
+      title: 'Stok Sedang Kosong',
+      description: 'Maaf, stok untuk paket ini sedang habis. Silakan pilih varian paket lainnya.',
       color: 'warning',
       icon: 'i-lucide-package-x'
     })
@@ -59,7 +70,7 @@ const isCreatingInvoice = ref(false)
 
 function onFormValidatedSubmit(_event: FormSubmitEvent<CheckoutSchema>) {
   if (!selectedVariant.value) {
-    toast.add({ title: 'Pilih Paket', description: 'Klik salah satu kartu paket terlebih dahulu.', color: 'warning' })
+    toast.add({ title: 'Pilih Paket', description: 'Klik salah satu baris paket terlebih dahulu.', color: 'warning' })
     return
   }
 
@@ -117,225 +128,289 @@ function formatRupiah(val: number) {
 <template>
   <section
     id="pilih-paket"
-    class="scroll-mt-20 py-14"
+    class="scroll-mt-20 py-16 sm:py-20"
   >
-    <UContainer class="space-y-8">
-      <!-- JUDUL SECTION -->
-      <div class="text-center max-w-2xl mx-auto space-y-2">
+    <!-- STRICTLY VERTICAL-LINEAR CONTAINER (MAX-W-3XL) -->
+    <UContainer class="max-w-3xl space-y-10">
+      <!-- SECTION HEADER -->
+      <div class="text-center space-y-2.5">
         <UBadge
           color="primary"
           variant="subtle"
-          size="md"
+          size="sm"
+          class="uppercase tracking-wider font-bold"
         >
-          Katalog Resmi & Instan
+          Konfigurasi Pesanan Instan
         </UBadge>
-        <h2 class="text-2xl sm:text-3xl font-extrabold text-highlighted">
+        <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-highlighted">
           Pilih Aplikasi & Paket Langganan
         </h2>
-        <p class="text-sm text-muted">
-          Klik aplikasi yang Anda inginkan, pilih kartu paket durasi, lalu masukkan Gmail Anda untuk menerima Invoice & Akun secara otomatis.
+        <p class="text-xs sm:text-sm text-muted max-w-xl mx-auto">
+          Ikuti langkah berurutan di bawah ini untuk memesan akun premium secara otomatis.
         </p>
       </div>
 
-      <!-- STEP 1: TAB PILIH APLIKASI DENGAN USKELETON PULSE & DEFAULT ICON -->
-      <div class="flex flex-wrap items-center justify-center gap-3">
-        <button
-          v-for="prod in catalog"
-          :key="prod.id"
-          type="button"
-          class="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all cursor-pointer focus:outline-none"
-          :class="
-            selectedProductId === prod.id
-              ? 'bg-primary text-white border-primary shadow-md scale-[1.02]'
-              : 'bg-elevated/60 text-highlighted border-default hover:border-primary/50'
-          "
-          @click="selectProduct(prod.id)"
-        >
-          <CommonAppIconImage
-            :src="prod.image_url"
-            :alt="prod.name"
-            size-class="w-7 h-7"
-            rounded-class="rounded-lg"
-          />
-
-          <span>{{ prod.name }}</span>
-
-          <UBadge
-            v-if="prod.promo_badge"
-            color="warning"
-            size="xs"
-            variant="solid"
-          >
-            {{ prod.promo_badge }}
-          </UBadge>
-        </button>
-      </div>
-
-      <!-- STEP 2: GRID KARTU PAKET DARI APLIKASI TERPILIH -->
-      <div
-        v-if="currentProduct"
-        class="space-y-6"
+      <!-- EMPTY STATE JIKA ADMIN BELUM MENAMBAHKAN PRODUK -->
+      <UCard
+        v-if="!catalog.length"
+        class="text-center py-10"
       >
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <UCard
-            v-for="variant in currentProduct.variants"
-            :key="variant.id"
-            class="cursor-pointer transition-all"
-            :class="[
-              selectedVariant?.id === variant.id
-                ? 'ring-2 ring-primary bg-primary/5 shadow-lg'
-                : 'hover:border-primary/50',
-              variant.available_stock <= 0 ? 'opacity-60' : ''
-            ]"
-            @click="selectVariantCard(variant)"
-          >
-            <div class="space-y-4">
-              <div class="flex items-start justify-between gap-2">
+        <p class="text-sm text-muted">
+          Katalog aplikasi sedang diperbarui oleh Administrator. Silakan kembali beberapa saat lagi.
+        </p>
+      </UCard>
+
+      <!-- LINEAR FLOW CONTENT -->
+      <div
+        v-else
+        class="space-y-8"
+      >
+        <!-- LANGKAH 1: PILIH APLIKASI (HORIZONTAL SCROLLABLE PILL SELECTOR) -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-muted">
+              Langkah 1 — Pilih Aplikasi Premium
+            </span>
+            <span class="text-xs text-muted">
+              {{ catalog.length }} Aplikasi Tersedia
+            </span>
+          </div>
+
+          <div class="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none [&::-webkit-scrollbar]:hidden">
+            <button
+              v-for="prod in catalog"
+              :key="prod.id"
+              type="button"
+              class="flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all cursor-pointer shrink-0 focus:outline-none"
+              :class="
+                selectedProductId === prod.id
+                  ? 'border-primary bg-primary/10 text-highlighted ring-2 ring-primary/30 shadow-xs'
+                  : 'border-default bg-elevated/40 text-muted hover:text-highlighted hover:border-primary/40'
+              "
+              @click="selectProduct(prod.id)"
+            >
+              <CommonAppIconImage
+                :src="prod.image_url"
+                :alt="prod.name"
+                size-class="w-9 h-9"
+                rounded-class="rounded-lg"
+              />
+
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-sm text-highlighted">{{ prod.name }}</span>
+                  <UBadge
+                    v-if="prod.promo_badge"
+                    color="warning"
+                    size="xs"
+                    variant="solid"
+                  >
+                    {{ prod.promo_badge }}
+                  </UBadge>
+                </div>
+                <span class="text-[11px] text-muted block">
+                  {{ prod.variants.length }} Pilihan Paket
+                </span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- LANGKAH 2: VERTICAL-LINEAR PACKAGE LIST (NO BENTO GRID) -->
+        <div
+          v-if="currentProduct"
+          class="space-y-3"
+        >
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-muted">
+              Langkah 2 — Pilih Durasi & Varian Paket ({{ currentProduct.name }})
+            </span>
+            <span
+              v-if="currentProduct.description"
+              class="text-xs text-muted truncate"
+            >
+              {{ currentProduct.description }}
+            </span>
+          </div>
+
+          <div class="space-y-3">
+            <div
+              v-for="variant in currentProduct.variants"
+              :key="variant.id"
+              class="p-4 sm:p-5 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              :class="[
+                selectedVariant?.id === variant.id
+                  ? 'border-primary bg-primary/5 ring-2 ring-primary shadow-sm'
+                  : 'border-default bg-default hover:border-primary/50',
+                variant.available_stock <= 0 ? 'opacity-55' : ''
+              ]"
+              @click="selectVariantRow(variant)"
+            >
+              <!-- KIRI: RADIO INDICATOR + ICON + NAMA PAKET -->
+              <div class="flex items-center gap-3.5 min-w-0">
+                <UIcon
+                  :name="selectedVariant?.id === variant.id ? 'i-lucide-circle-check-big' : 'i-lucide-circle'"
+                  class="w-5 h-5 shrink-0 transition-colors"
+                  :class="selectedVariant?.id === variant.id ? 'text-primary' : 'text-muted'"
+                />
+
+                <CommonAppIconImage
+                  :src="currentProduct.image_url"
+                  :alt="currentProduct.name"
+                  size-class="w-10 h-10"
+                  rounded-class="rounded-xl"
+                />
+
+                <div class="min-w-0 space-y-0.5">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="font-bold text-sm sm:text-base text-highlighted">
+                      {{ variant.name }}
+                    </h3>
+                    <UBadge
+                      :color="variant.is_custom_gmail ? 'warning' : (variant.available_stock > 0 ? 'success' : 'error')"
+                      variant="subtle"
+                      size="xs"
+                    >
+                      {{ variant.is_custom_gmail ? 'Upgrade Gmail Pribadi' : (variant.available_stock > 0 ? `Tersedia: ${variant.available_stock} Akun` : 'Stok Habis') }}
+                    </UBadge>
+                    <UBadge
+                      v-if="variant.is_promo_active"
+                      color="primary"
+                      variant="solid"
+                      size="xs"
+                    >
+                      PROMO AKTIF
+                    </UBadge>
+                  </div>
+
+                  <p class="text-xs text-muted flex items-center gap-1.5">
+                    <UIcon
+                      name="i-lucide-calendar-clock"
+                      class="w-3.5 h-3.5"
+                    />
+                    <span>Masa Aktif Garansi: <strong>{{ variant.duration }}</strong></span>
+                  </p>
+                </div>
+              </div>
+
+              <!-- KANAN: HARGA NORMAL CORET & HARGA EFEKTIF -->
+              <div class="flex sm:flex-col items-baseline sm:items-end justify-between border-t sm:border-t-0 pt-2.5 sm:pt-0 border-default shrink-0">
+                <span class="text-xs text-muted sm:hidden">Harga Paket:</span>
+                <div class="text-right">
+                  <div
+                    v-if="variant.is_promo_active"
+                    class="text-xs text-muted line-through font-mono"
+                  >
+                    {{ formatRupiah(variant.original_price) }}
+                  </div>
+                  <div class="text-lg sm:text-xl font-extrabold font-mono text-primary">
+                    {{ formatRupiah(variant.effective_price) }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LANGKAH 3: VERTICAL CHECKOUT FORM (MUNCUL KETIKA PAKET DIPILIH) -->
+        <div
+          v-if="selectedVariant && currentProduct"
+          class="space-y-3 pt-2"
+        >
+          <span class="text-xs font-bold uppercase tracking-wider text-muted block">
+            Langkah 3 — Masukkan Alamat Gmail Penerima & Buat QRIS
+          </span>
+
+          <UCard class="border-2 border-primary/50 shadow-lg">
+            <template #header>
+              <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2.5">
                   <CommonAppIconImage
                     :src="currentProduct.image_url"
                     :alt="currentProduct.name"
-                    size-class="w-10 h-10"
-                    rounded-class="rounded-xl"
+                    size-class="w-8 h-8"
+                    rounded-class="rounded-lg"
                   />
                   <div>
-                    <h3 class="font-bold text-base text-highlighted">
-                      {{ variant.name }}
+                    <h3 class="font-bold text-sm sm:text-base text-highlighted">
+                      {{ currentProduct.name }} — {{ selectedVariant.name }}
                     </h3>
-                    <span class="text-xs text-muted flex items-center gap-1 mt-0.5">
-                      <UIcon
-                        name="i-lucide-clock"
-                        class="w-3.5 h-3.5"
-                      />
-                      Durasi: {{ variant.duration }}
-                    </span>
+                    <p class="text-xs text-muted">
+                      Durasi {{ selectedVariant.duration }} • Pengiriman Otomatis
+                    </p>
                   </div>
                 </div>
-
-                <UBadge
-                  :color="variant.is_custom_gmail ? 'warning' : (variant.available_stock > 0 ? 'success' : 'error')"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ variant.is_custom_gmail ? 'Custom Gmail' : (variant.available_stock > 0 ? `Stok: ${variant.available_stock}` : 'Habis') }}
-                </UBadge>
+                <span class="font-mono font-extrabold text-lg text-primary">
+                  {{ formatRupiah(selectedVariant.effective_price) }}
+                </span>
               </div>
+            </template>
 
-              <div class="pt-2 border-t border-default flex items-baseline justify-between">
-                <div>
-                  <div
-                    v-if="variant.is_promo_active"
-                    class="text-xs text-muted line-through"
-                  >
-                    {{ formatRupiah(variant.original_price) }}
-                  </div>
-                  <div class="text-2xl font-extrabold text-primary">
-                    {{ formatRupiah(variant.effective_price) }}
-                  </div>
-                </div>
-
-                <UIcon
-                  :name="selectedVariant?.id === variant.id ? 'i-lucide-check-circle-2' : 'i-lucide-circle'"
-                  class="w-6 h-6"
-                  :class="selectedVariant?.id === variant.id ? 'text-primary' : 'text-muted'"
+            <UForm
+              :schema="checkoutFormSchema"
+              :state="formState"
+              class="space-y-4"
+              @submit="onFormValidatedSubmit"
+            >
+              <UFormField
+                label="Alamat Gmail Penerima Invoice & Akun"
+                name="customer_email"
+                help="Invoice resmi dan kredensial akun dikirim otomatis ke alamat Gmail ini."
+                required
+              >
+                <UInput
+                  v-model="formState.customer_email"
+                  type="email"
+                  placeholder="namaanda@gmail.com"
+                  icon="i-lucide-mail"
+                  size="lg"
+                  class="w-full"
                 />
+              </UFormField>
+
+              <UFormField
+                v-if="selectedVariant.is_custom_gmail"
+                label="Alamat Gmail yang Ingin Dijadikan Premium (Custom Gmail)"
+                name="custom_gmail_account"
+                help="Admin kami akan mengaktifkan fitur premium pada alamat Gmail ini setelah pembayaran lunas."
+                required
+              >
+                <UInput
+                  v-model="formState.custom_gmail_account"
+                  type="email"
+                  placeholder="akun.target.premium@gmail.com"
+                  icon="i-lucide-sparkles"
+                  size="lg"
+                  class="w-full"
+                />
+              </UFormField>
+
+              <div class="p-3.5 rounded-xl bg-elevated border border-default text-xs text-muted space-y-1.5">
+                <div class="font-bold text-highlighted flex items-center gap-1.5">
+                  <UIcon
+                    name="i-lucide-shield-alert"
+                    class="w-4 h-4 text-warning shrink-0"
+                  />
+                  <span>Ketentuan Pemakaian & Garansi {{ currentProduct.name }}:</span>
+                </div>
+                <p class="whitespace-pre-line leading-relaxed">
+                  {{ currentProduct.usage_rules }}
+                </p>
               </div>
-            </div>
+
+              <UButton
+                type="submit"
+                color="primary"
+                size="xl"
+                block
+                icon="i-lucide-qr-code"
+                label="Lanjutkan ke Pembayaran QRIS Dinamis"
+                class="font-bold"
+                :loading="isCreatingInvoice"
+              />
+            </UForm>
           </UCard>
         </div>
-
-        <!-- STEP 3: FORM INPUT GMAIL PEMBELI -->
-        <UCard
-          v-if="selectedVariant"
-          class="max-w-2xl mx-auto border-2 border-primary/40 shadow-xl"
-        >
-          <template #header>
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2.5">
-                <div class="p-2 rounded-lg bg-primary/10 text-primary">
-                  <UIcon
-                    name="i-lucide-mail-plus"
-                    class="w-5 h-5"
-                  />
-                </div>
-                <div>
-                  <h3 class="font-bold text-base text-highlighted">
-                    Lengkapi Form Pengiriman Invoice
-                  </h3>
-                  <p class="text-xs text-muted">
-                    Paket Terpilih: <strong>{{ currentProduct.name }} — {{ selectedVariant.name }}</strong>
-                  </p>
-                </div>
-              </div>
-              <span class="font-mono font-bold text-lg text-primary">
-                {{ formatRupiah(selectedVariant.effective_price) }}
-              </span>
-            </div>
-          </template>
-
-          <UForm
-            :schema="checkoutFormSchema"
-            :state="formState"
-            class="space-y-4"
-            @submit="onFormValidatedSubmit"
-          >
-            <UFormField
-              label="Alamat Gmail Penerima Invoice & Akun"
-              name="customer_email"
-              help="Invoice resmi dan detail akun akan dikirim otomatis ke alamat Gmail ini."
-              required
-            >
-              <UInput
-                v-model="formState.customer_email"
-                type="email"
-                placeholder="namaanda@gmail.com"
-                icon="i-lucide-mail"
-                size="lg"
-                class="w-full"
-              />
-            </UFormField>
-
-            <UFormField
-              v-if="selectedVariant.is_custom_gmail"
-              label="Alamat Gmail yang Ingin Dijadikan Premium (Custom Gmail)"
-              name="custom_gmail_account"
-              help="Admin kami akan mengaktifkan fitur premium pada alamat Gmail ini setelah pembayaran lunas."
-              required
-            >
-              <UInput
-                v-model="formState.custom_gmail_account"
-                type="email"
-                placeholder="akun.target.premium@gmail.com"
-                icon="i-lucide-sparkles"
-                size="lg"
-                class="w-full"
-              />
-            </UFormField>
-
-            <div class="p-3 rounded-lg bg-elevated text-xs text-muted space-y-1">
-              <div class="font-semibold text-highlighted flex items-center gap-1.5">
-                <UIcon
-                  name="i-lucide-shield-alert"
-                  class="w-4 h-4 text-warning"
-                />
-                Aturan Pemakaian {{ currentProduct.name }}:
-              </div>
-              <p class="whitespace-pre-line leading-relaxed">
-                {{ currentProduct.usage_rules }}
-              </p>
-            </div>
-
-            <UButton
-              type="submit"
-              color="primary"
-              size="xl"
-              block
-              icon="i-lucide-qr-code"
-              label="Lanjut ke Halaman Pembayaran QRIS"
-              :loading="isCreatingInvoice"
-            />
-          </UForm>
-        </UCard>
       </div>
 
       <CommonConfirmDialog
