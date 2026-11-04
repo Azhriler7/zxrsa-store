@@ -1,55 +1,103 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/HeroSection.vue
- DESKRIPSI: Komponen Lego Hero Section di Homepage Pembeli
+ DESKRIPSI: Hero Section Modern SaaS Tech Aesthetic (Strictly Vertical-Linear
+            Flow, No Bento Grid, 100% Responsif Desktop & Mobile).
 =========================================================================== -->
 <script setup lang="ts">
-function scrollToPackages() {
-  document.getElementById('pilih-paket')?.scrollIntoView({ behavior: 'smooth' })
-}
-
-function scrollToFaq() {
-  document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' })
-}
+const linearSteps = [
+  {
+    step: '01',
+    title: 'Pilih Aplikasi & Paket',
+    desc: 'Klik aplikasi premium dan durasi langganan sesuai kebutuhan Anda.'
+  },
+  {
+    step: '02',
+    title: 'Scan QRIS Dinamis',
+    desc: 'Nominal dan kode unik otomatis terisi tanpa perlu ketik manual.'
+  },
+  {
+    step: '03',
+    title: 'Akun Terkirim Instan',
+    desc: 'Detik itu juga tampil di layar Invoice dan masuk ke Gmail Anda.'
+  }
+]
 </script>
 
 <template>
   <section
-    id="hero-section"
-    class="scroll-mt-20 py-14 lg:py-20 border-b border-default bg-linear-to-b from-primary/5 to-transparent"
+    id="beranda"
+    class="relative overflow-hidden pt-12 pb-16 sm:pt-20 sm:pb-24 border-b border-default"
   >
-    <UContainer class="text-center max-w-3xl space-y-6">
-      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-        <UIcon
-          name="i-lucide-shield-check"
-          class="w-4 h-4"
-        />
-        <span>Otomatis 24 Jam • QRIS Instan • Bergaransi Penuh</span>
+    <!-- SUBTLE SAAS RADIAL GLOW BACKGROUND -->
+    <div
+      class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-linear-to-b from-primary/10 via-primary/5 to-transparent"
+      aria-hidden="true"
+    />
+
+    <!-- STRICTLY VERTICAL-LINEAR CONTAINER -->
+    <UContainer class="max-w-3xl text-center space-y-8">
+      <!-- STATUS PILL -->
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-semibold">
+        <span class="w-2 h-2 rounded-full bg-success animate-ping" />
+        <span>Sistem Pengiriman Otomatis Aktif 24/7 • Enkripsi AES-256-GCM</span>
       </div>
 
-      <h1 class="text-3xl sm:text-5xl font-extrabold text-highlighted tracking-tight leading-tight">
-        Upgrade Aplikasi Favoritmu ke <span class="text-primary">Versi Pro & VIP</span> dalam Hitungan Detik
-      </h1>
+      <!-- HEADLINE & SUBHEADLINE -->
+      <div class="space-y-4">
+        <h1 class="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-highlighted leading-[1.12]">
+          Infrastruktur Instan untuk
+          <span class="text-primary block sm:inline">Akun Aplikasi Premium</span>
+        </h1>
 
-      <p class="text-base sm:text-lg text-muted max-w-2xl mx-auto leading-relaxed">
-        Dapatkan akun premium resmi untuk <strong>Alight Motion Pro, Wink VIP, CapCut Pro</strong>, dan aplikasi kreator lainnya. Pembayaran otomatis via QRIS langsung kirim ke Gmail Anda!
-      </p>
+        <p class="text-sm sm:text-base lg:text-lg text-muted max-w-2xl mx-auto leading-relaxed">
+          Platform penyedia akun premium bergaransi resmi dengan verifikasi pembayaran
+          <strong class="text-highlighted font-semibold">QRIS Dinamis Otomatis</strong>.
+          Tanpa antre chat manual, kredensial akun langsung dikirim ke layar dan Gmail Anda dalam hitungan detik.
+        </p>
+      </div>
 
-      <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+      <!-- PRIMARY & SECONDARY CTA -->
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
         <UButton
-          size="xl"
+          href="#pilih-paket"
           color="primary"
-          icon="i-lucide-rocket"
-          label="Pilih Paket Sekarang"
-          @click="scrollToPackages"
+          size="xl"
+          icon="i-lucide-arrow-down-right"
+          label="Mulai Pilih Paket Sekarang"
+          class="w-full sm:w-auto justify-center font-bold px-8 shadow-md"
         />
         <UButton
-          size="xl"
+          href="#testimoni"
           color="neutral"
           variant="subtle"
-          icon="i-lucide-circle-help"
-          label="Cara Pembelian"
-          @click="scrollToFaq"
+          size="xl"
+          icon="i-lucide-shield-check"
+          label="Lihat Ulasan Terverifikasi"
+          class="w-full sm:w-auto justify-center font-semibold"
         />
+      </div>
+
+      <!-- LINEAR 3-STEP WORKFLOW STRIP (NO BENTO GRID) -->
+      <div class="pt-8 border-t border-default">
+        <div class="flex flex-col sm:flex-row items-stretch justify-between gap-6 text-left">
+          <div
+            v-for="item in linearSteps"
+            :key="item.step"
+            class="flex-1 flex items-start gap-3.5"
+          >
+            <span class="font-mono text-xs font-extrabold px-2.5 py-1 rounded-md bg-elevated border border-default text-primary shrink-0">
+              {{ item.step }}
+            </span>
+            <div class="space-y-1">
+              <h2 class="text-sm font-bold text-highlighted">
+                {{ item.title }}
+              </h2>
+              <p class="text-xs text-muted leading-relaxed">
+                {{ item.desc }}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </UContainer>
   </section>
