@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/admin/ProductFormModal.vue
- DESKRIPSI: Komponen Lego Modal Form CRUD Produk Aplikasi dengan Dropdown
-            Icon GitHub/jsDelivr, Default Image, & USkeleton Berdenyut.
+ DESKRIPSI: Komponen Lego Modal Form CRUD Produk Aplikasi (Deskripsi Dipindahkan
+            ke Tiap Paket Varian).
 =========================================================================== -->
 <script setup lang="ts">
 import { z } from 'zod'
@@ -10,7 +10,6 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 export interface ProductFormInitialData {
   id?: string
   name: string
-  description: string | null
   usage_rules: string
   image_url?: string | null
   promo_badge: string | null
@@ -26,7 +25,6 @@ const emit = defineEmits<{ saved: [] }>()
 const toast = useToast()
 const config = useRuntimeConfig()
 
-// Perbaikan Overload TypeScript: Pastikan default selalu mengembalikan tipe string murni
 const defaultRepo = String(config.public.githubIconRepo || 'Azhriler7/Azhriler7-my-public-assets')
 const defaultFolder = String(config.public.githubIconFolder || 'zxrsa-store-asset')
 
@@ -53,7 +51,6 @@ const defaultPlaceholderUrl = computed(() =>
 
 const schema = z.object({
   name: z.string().min(2, 'Nama aplikasi wajib diisi'),
-  description: z.string().optional(),
   usage_rules: z.string().min(5, 'Aturan pemakaian wajib diisi untuk ditampilkan di Invoice'),
   image_url: z.string().optional(),
   promo_badge: z.string().optional(),
@@ -64,7 +61,6 @@ type Schema = z.output<typeof schema>
 
 const state = reactive<Schema>({
   name: '',
-  description: '',
   usage_rules: '1. Dilarang mengubah password atau profil akun.\n2. Gunakan sesuai batas perangkat yang ditentukan.\n3. Melanggar aturan akan menghanguskan garansi.',
   image_url: '',
   promo_badge: '',
@@ -76,14 +72,12 @@ watch(
   () => {
     if (props.initialData) {
       state.name = props.initialData.name
-      state.description = props.initialData.description || ''
       state.usage_rules = props.initialData.usage_rules
       state.image_url = props.initialData.image_url || defaultPlaceholderUrl.value
       state.promo_badge = props.initialData.promo_badge || ''
       state.is_active = props.initialData.is_active
     } else {
       state.name = ''
-      state.description = ''
       state.usage_rules = '1. Dilarang mengubah password atau profil akun.\n2. Gunakan sesuai batas perangkat yang ditentukan.\n3. Melanggar aturan akan menghanguskan garansi.'
       state.image_url = defaultPlaceholderUrl.value
       state.promo_badge = ''
@@ -110,7 +104,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
     toast.add({
       title: 'Produk Tersimpan',
-      description: `Aplikasi ${event.data.name} beserta icon berhasil disimpan.`,
+      description: `Aplikasi ${event.data.name} berhasil disimpan.`,
       color: 'success',
       icon: 'i-lucide-check-circle'
     })
@@ -164,11 +158,9 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           </UFormField>
         </div>
 
-        <!-- DROPDOWN PILIH ICON DARI PUBLIC GITHUB + USKELETON BERDENYUT -->
         <div class="p-3.5 rounded-xl bg-elevated/60 border border-default space-y-3">
           <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-3">
-              <!-- LEGO APP ICON DENGAN USKELETON PULSE & DEFAULT IMAGE -->
               <CommonAppIconImage
                 :src="state.image_url"
                 :alt="state.name || 'Preview Icon'"
@@ -248,18 +240,6 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
             </select>
           </UFormField>
         </div>
-
-        <UFormField
-          label="Deskripsi Singkat"
-          name="description"
-        >
-          <UTextarea
-            v-model="state.description"
-            :rows="2"
-            class="w-full"
-            placeholder="Fitur unggulan aplikasi..."
-          />
-        </UFormField>
 
         <UFormField
           label="Aturan Pemakaian & Garansi (Muncul di Invoice & Email)"

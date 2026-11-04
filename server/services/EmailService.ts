@@ -59,6 +59,7 @@ export class EmailService {
       customGmailTarget: payload.customGmailTarget ?? null,
       accountEmail: payload.accountEmail ?? null,
       accountPassword: payload.accountPassword ?? null,
+      accountExtraLink: payload.accountExtraLink ?? null,
       usageRules: payload.usageRules,
       invoiceUrl
     })

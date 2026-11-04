@@ -1,6 +1,6 @@
 <!-- ==========================================================================
  FILE: app/components/invoice/CredentialDeliverCard.vue
- DESKRIPSI: Komponen Lego Kotak Detail Akun (Email & Password Bersih)
+ DESKRIPSI: Komponen Lego Kotak Detail Akun (Email, Password, & Link Optional)
 =========================================================================== -->
 <script setup lang="ts">
 defineProps<{
@@ -84,6 +84,7 @@ async function copyText(label: string, value: string) {
         Salin kredensial akun di bawah ini (juga telah dikirim otomatis ke Gmail Anda):
       </p>
 
+      <!-- 1. EMAIL / USERNAME -->
       <div class="p-3 rounded-lg bg-default border border-default flex items-center justify-between gap-2">
         <div class="font-mono text-xs truncate">
           <span class="text-muted block">Email / Username:</span>
@@ -99,6 +100,7 @@ async function copyText(label: string, value: string) {
         />
       </div>
 
+      <!-- 2. PASSWORD AKUN -->
       <div class="p-3 rounded-lg bg-default border border-default flex items-center justify-between gap-2">
         <div class="font-mono text-xs truncate">
           <span class="text-muted block">Password Akun:</span>
@@ -112,6 +114,43 @@ async function copyText(label: string, value: string) {
           label="Salin Sandi"
           @click="copyText('Password', deliveredAccount.password)"
         />
+      </div>
+
+      <!-- 3. LINK (OPTIONAL: HANYA MUNCUL JIKA ADA DI STOK) -->
+      <div
+        v-if="deliveredAccount.extraInfoLink"
+        class="p-3 rounded-lg bg-default border border-primary/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+      >
+        <div class="font-mono text-xs min-w-0">
+          <span class="text-muted block">Link:</span>
+          <a
+            :href="deliveredAccount.extraInfoLink"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-sm font-bold text-primary underline break-all"
+          >
+            {{ deliveredAccount.extraInfoLink }}
+          </a>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <UButton
+            size="xs"
+            color="neutral"
+            variant="subtle"
+            icon="i-lucide-copy"
+            label="Salin Link"
+            @click="copyText('Link', deliveredAccount.extraInfoLink)"
+          />
+          <UButton
+            size="xs"
+            color="primary"
+            variant="solid"
+            icon="i-lucide-external-link"
+            label="Buka Link"
+            :to="deliveredAccount.extraInfoLink"
+            target="_blank"
+          />
+        </div>
       </div>
     </div>
   </UCard>

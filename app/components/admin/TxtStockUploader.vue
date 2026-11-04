@@ -1,13 +1,21 @@
 <!-- ==========================================================================
  FILE: app/components/admin/TxtStockUploader.vue
- DESKRIPSI: Komponen Lego Upload File .txt & Pop-up Keluarkan Stok Terpilih
-            (Sinkronisasi Increment/Decrement dengan Checkbox List Stok).
+ DESKRIPSI: Komponen Lego Input Stok Dinamis 3 Kolom (Email, Password, Link
+            Optional) dengan Tombol [+ Tambah Baris], [-] Kurangi Baris,
+            Import .txt Otomatis, & Pop-up Keluarkan Stok.
 =========================================================================== -->
 <script setup lang="ts">
 export interface VariantOption {
   id: string
   label: string
   availableStock: number
+}
+
+interface StockInputRow {
+  rowKey: string
+  email: string
+  password: string
+  link: string
 }
 
 interface StockItemRow {
@@ -25,10 +33,132 @@ const emit = defineEmits<{ uploaded: [] }>()
 const toast = useToast()
 
 const selectedVariantId = ref('')
-const rawTxtContent = ref('')
 const isSubmitting = ref(false)
 
-// State untuk Pop-Up Pilih & Keluarkan Stok
+// Buat 1 baris default awal
+function createEmptyRow(): StockInputRow {
+  return {
+    rowKey: crypto.randomUUID(),
+    email: '',
+    password: '',
+    link: ''
+  }
+}
+
+const stockRows = ref<StockInputRow[]>([createEmptyRow()])
+
+function addNewRow() {
+  stockRows.value.push(createEmptyRow())
+}
+
+function removeRow(index: number) {
+  if (stockRows.value.length <= 1) {
+    // Jika tinggal 1 baris, cukup kosongkan isinya
+    stockRows.value = [createEmptyRow()]
+    return
+  }
+  stockRows.value.splice(index, 1)
+}
+
+// Jumlah baris yang sudah terisi Email & Password dengan benar
+const validRowsToSave = computed(() =>
+  stockRows.value.filter(r => r.email.trim().length >= 3 && r.password.trim().length >= 1)
+)
+
+// Jika Admin memilih file .txt, otomatis pecah ke dalam baris-baris 3 kolom (Email, Password, Link)
+function handleTxtFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = () => {
+    const rawText = String(reader.result || '')
+    const lines = rawText
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && l.includes('|'))
+
+    if (lines.length === 0) {
+      toast.add({
+        title: 'Format .txt Tidak Dikenali',
+        description: 'Pastikan baris di dalam .txt dipisahkan dengan tanda pipa (|).',
+        color: 'warning'
+      })
+      return
+    }
+
+    const parsedRows: StockInputRow[] = lines.map((line) => {
+      const parts = line.split('|').map(p => p.trim())
+      return {
+        rowKey: crypto.randomUUID(),
+        email: parts[0] || '',
+        password: parts[1] || '',
+        link: parts.slice(2).join('|') || ''
+      }
+    })
+
+    stockRows.value = parsedRows
+    input.value = ''
+
+    toast.add({
+      title: 'File .txt Berhasil Dimuat ke Baris Input',
+      description: `${parsedRows.length} akun siap diperiksa dan disimpan.`,
+      color: 'primary',
+      icon: 'i-lucide-file-check'
+    })
+  }
+  reader.readAsText(file)
+}
+
+// Simpan seluruh baris ke database lalu reset kembali menjadi 1 baris saja
+async function handleUploadStocks() {
+  if (!selectedVariantId.value) {
+    toast.add({ title: 'Pilih Paket', description: 'Silakan pilih paket tujuan terlebih dahulu.', color: 'warning' })
+    return
+  }
+
+  if (validRowsToSave.value.length === 0) {
+    toast.add({ title: 'Data Belum Lengkap', description: 'Isi minimal Email dan Password pada baris akun.', color: 'warning' })
+    return
+  }
+
+  isSubmitting.value = true
+  try {
+    const res = await $fetch('/api/admin/stocks', {
+      method: 'POST',
+      body: {
+        action: 'add_structured',
+        variant_id: selectedVariantId.value,
+        items: validRowsToSave.value.map(r => ({
+          email: r.email.trim(),
+          password: r.password.trim(),
+          link: r.link.trim() || null
+        }))
+      }
+    })
+
+    toast.add({
+      title: 'Stok Berhasil Dienkripsi & Disimpan!',
+      description: `${res.insertedCount} akun berhasil ditambahkan ke database D1.`,
+      color: 'success',
+      icon: 'i-lucide-shield-check'
+    })
+
+    // Reset kembali menjadi 1 baris kosong setelah berhasil disimpan
+    stockRows.value = [createEmptyRow()]
+    emit('uploaded')
+  } catch (err: unknown) {
+    const msg = (err as { data?: { statusMessage?: string } })?.data?.statusMessage || 'Gagal menyimpan stok.'
+    toast.add({ title: 'Gagal Menyimpan Stok', description: msg, color: 'error' })
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// ----------------------------------------------------------------------------
+// [SECTION: POP-UP PILIH & KELUARKAN STOK TERSEDIA]
+// ----------------------------------------------------------------------------
 const isStockPickerOpen = ref(false)
 const isLoadingStocks = ref(false)
 const availableStockList = ref<StockItemRow[]>([])
@@ -38,15 +168,9 @@ const currentVariantInfo = computed(() =>
   props.variantOptions.find(v => v.id === selectedVariantId.value) || null
 )
 
-// Total stok maksimal yang tersedia pada paket terpilih
 const maxStockCount = computed(() => availableStockList.value.length)
-
-// Jumlah yang sedang dicentang saat ini (selaras dengan checkbox)
 const selectedCount = computed(() => selectedStockIds.value.length)
 
-// ----------------------------------------------------------------------------
-// [SECTION: BUKA POP-UP & MUAT DAFTAR STOK PAKET TERPILIH]
-// ----------------------------------------------------------------------------
 async function openStockPickerModal() {
   if (!selectedVariantId.value) return
   isStockPickerOpen.value = true
@@ -69,13 +193,8 @@ async function openStockPickerModal() {
   }
 }
 
-// ----------------------------------------------------------------------------
-// [SECTION: SINKRONISASI TOMBOL INCREMENT / DECREMENT DENGAN CHECKBOX]
-// ----------------------------------------------------------------------------
 function handleIncrementSelection() {
   if (selectedStockIds.value.length >= maxStockCount.value) return
-
-  // Cari stok pertama yang belum dicentang, lalu tambahkan ke daftar centang
   const nextUnchecked = availableStockList.value.find(
     item => !selectedStockIds.value.includes(item.id)
   )
@@ -86,7 +205,6 @@ function handleIncrementSelection() {
 
 function handleDecrementSelection() {
   if (selectedStockIds.value.length <= 0) return
-  // Lepas centang pada item terakhir yang dipilih
   selectedStockIds.value.pop()
 }
 
@@ -107,84 +225,6 @@ function selectAllStocks() {
   }
 }
 
-// ----------------------------------------------------------------------------
-// [SECTION: LIVE PREVIEW PEMISAHAN BARIS .TXT]
-// ----------------------------------------------------------------------------
-const previewParsedLines = computed(() => {
-  if (!rawTxtContent.value.trim()) return []
-  return rawTxtContent.value
-    .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    .map((line, idx) => {
-      const parts = line.split('|').map(p => p.trim())
-      const isValid = (parts.length === 2 || parts.length >= 3) && (parts[0]?.includes('@') ?? false)
-      return {
-        lineNumber: idx + 1,
-        email: parts[0] || '-',
-        password: parts[1] || '-',
-        extraLink: parts.slice(2).join('|') || null,
-        format: parts.length >= 3 ? '3 Kolom (+Link)' : '2 Kolom',
-        isValid
-      }
-    })
-})
-
-function handleTxtFileChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-
-  const reader = new FileReader()
-  reader.onload = () => {
-    rawTxtContent.value = String(reader.result || '')
-    toast.add({
-      title: 'File .txt Terbaca',
-      description: `Berhasil memuat ${previewParsedLines.value.length} baris dari ${file.name}`,
-      color: 'primary',
-      icon: 'i-lucide-file-text'
-    })
-  }
-  reader.readAsText(file)
-}
-
-async function handleUploadStocks() {
-  if (!selectedVariantId.value) {
-    toast.add({ title: 'Pilih Paket', description: 'Silakan pilih paket tujuan terlebih dahulu.', color: 'warning' })
-    return
-  }
-
-  isSubmitting.value = true
-  try {
-    const res = await $fetch('/api/admin/stocks', {
-      method: 'POST',
-      body: {
-        action: 'add_txt',
-        variant_id: selectedVariantId.value,
-        raw_txt_content: rawTxtContent.value
-      }
-    })
-
-    toast.add({
-      title: 'Stok Berhasil Dienkripsi & Disimpan',
-      description: `${res.insertedCount} akun berhasil masuk ke database D1.`,
-      color: 'success',
-      icon: 'i-lucide-shield-check'
-    })
-
-    rawTxtContent.value = ''
-    emit('uploaded')
-  } catch (err: unknown) {
-    const msg = (err as { data?: { statusMessage?: string } })?.data?.statusMessage || 'Gagal mengunggah stok.'
-    toast.add({ title: 'Gagal Upload', description: msg, color: 'error' })
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
-// ----------------------------------------------------------------------------
-// [SECTION: EKSEKUSI KELUARKAN STOK YANG DICENTANG DI POP-UP]
-// ----------------------------------------------------------------------------
 async function handleConfirmRemoveSelectedStocks() {
   if (!selectedVariantId.value || selectedStockIds.value.length === 0) return
   isSubmitting.value = true
@@ -220,16 +260,16 @@ async function handleConfirmRemoveSelectedStocks() {
 
 <template>
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- KOLOM KIRI: INPUT FILE .TXT -->
+    <!-- KOLOM KIRI: INPUT STOK BARIS DINAMIS (EMAIL, PASSWORD, LINK OPTIONAL) -->
     <UCard class="lg:col-span-2">
       <template #header>
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-base font-bold text-highlighted">
-              Upload File .txt & Pemisah Stok Otomatis
+              Input Stok Akun (3 Kolom: Email, Password, & Link Optional)
             </h2>
             <p class="text-xs text-muted">
-              Mendukung 1 file .txt berisi banyak akun (`email|pw` maupun `email | pw | link_generator`)
+              Tambah baris satu per satu atau import otomatis dari file <code>.txt</code> (`email|pw` atau `email | pw | link`).
             </p>
           </div>
           <UBadge
@@ -242,106 +282,165 @@ async function handleConfirmRemoveSelectedStocks() {
         </div>
       </template>
 
-      <div class="space-y-4">
-        <UFormField
-          label="1. Pilih Varian Paket Tujuan"
-          required
-        >
-          <select
-            v-model="selectedVariantId"
-            class="w-full rounded-md border border-default bg-default px-3 py-2 text-sm text-highlighted focus:outline-none focus:ring-2 focus:ring-primary"
+      <div class="space-y-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <UFormField
+            label="1. Pilih Varian Paket Tujuan"
+            required
           >
-            <option
-              value=""
-              disabled
+            <select
+              v-model="selectedVariantId"
+              class="w-full rounded-md border border-default bg-default px-3 py-2 text-sm text-highlighted focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              -- Pilih Paket Aplikasi (Non-Custom Gmail) --
-            </option>
-            <option
-              v-for="opt in variantOptions"
-              :key="opt.id"
-              :value="opt.id"
+              <option
+                value=""
+                disabled
+              >
+                -- Pilih Paket Aplikasi (Non-Custom Gmail) --
+              </option>
+              <option
+                v-for="opt in variantOptions"
+                :key="opt.id"
+                :value="opt.id"
+              >
+                {{ opt.label }} (Stok Ready: {{ opt.availableStock }})
+              </option>
+            </select>
+          </UFormField>
+
+          <UFormField label="2. Import Cepat dari File .txt (Opsional)">
+            <input
+              type="file"
+              accept=".txt"
+              class="block w-full text-xs text-muted file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+              @change="handleTxtFileChange"
             >
-              {{ opt.label }} (Stok Ready: {{ opt.availableStock }})
-            </option>
-          </select>
-        </UFormField>
+          </UFormField>
+        </div>
 
-        <UFormField label="2. Pilih File .txt dari Komputer Anda">
-          <input
-            type="file"
-            accept=".txt"
-            class="block w-full text-sm text-muted file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-            @change="handleTxtFileChange"
-          >
-        </UFormField>
+        <!-- DAFTAR BARIS INPUT DINAMIS (EMAIL | PASSWORD | LINK OPTIONAL | TOMBOL MINUS) -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-muted">
+              Daftar Baris Akun ({{ stockRows.length }} Baris)
+            </span>
+            <span class="text-xs text-muted">
+              Kolom <strong>Link</strong> boleh dikosongkan jika tidak diperlukan
+            </span>
+          </div>
 
-        <UFormField label="Atau Tempel / Edit Langsung Isi .txt di Bawah Ini (1 Baris = 1 Akun)">
-          <UTextarea
-            v-model="rawTxtContent"
-            :rows="7"
-            class="w-full font-mono text-xs"
-            placeholder="62vy1o0l@acqf.poj.me|masuk123&#10;hifidxhen672@ydah.me | Masuk12345- | https://generator.email/ydah.me/hifidxhen672"
-          />
-        </UFormField>
+          <div class="max-h-96 overflow-y-auto space-y-2.5 pr-1">
+            <div
+              v-for="(row, index) in stockRows"
+              :key="row.rowKey"
+              class="p-3 rounded-xl border border-default bg-elevated/40 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
+            >
+              <span class="font-mono text-xs font-bold text-muted w-6 shrink-0">
+                #{{ index + 1 }}
+              </span>
 
-        <div class="flex justify-end">
+              <!-- INPUT 1: EMAIL / GMAIL -->
+              <div class="flex-1 min-w-0">
+                <UInput
+                  v-model="row.email"
+                  placeholder="Email / Username (cth: user@domain.me)"
+                  size="sm"
+                  class="w-full font-mono text-xs"
+                />
+              </div>
+
+              <!-- INPUT 2: PASSWORD -->
+              <div class="sm:w-40 shrink-0">
+                <UInput
+                  v-model="row.password"
+                  placeholder="Password Akun"
+                  size="sm"
+                  class="w-full font-mono text-xs"
+                />
+              </div>
+
+              <!-- INPUT 3: LINK (OPTIONAL / BOLEH NULL) -->
+              <div class="flex-1 min-w-0">
+                <UInput
+                  v-model="row.link"
+                  placeholder="Link (Opsional: https://generator.email/...)"
+                  size="sm"
+                  class="w-full font-mono text-xs"
+                />
+              </div>
+
+              <!-- TOMBOL MINUS [-] DI SAMPING KANAN BARIS UNTUK KURANGI BARIS -->
+              <UTooltip text="Kurangi / Hapus Baris Ini">
+                <UButton
+                  color="error"
+                  variant="subtle"
+                  size="sm"
+                  icon="i-lucide-minus"
+                  class="shrink-0"
+                  @click="removeRow(index)"
+                />
+              </UTooltip>
+            </div>
+          </div>
+
+          <!-- TOMBOL TAMBAH BARIS KE BAWAH -->
+          <div class="pt-1">
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-lucide-plus"
+              label="Tambah Baris Akun Baru"
+              block
+              @click="addNewRow"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-3 border-t border-default">
+          <span class="text-xs text-muted">
+            Siap disimpan: <strong class="text-primary">{{ validRowsToSave.length }} Akun Valid</strong>
+          </span>
+
           <UButton
             icon="i-lucide-upload-cloud"
             color="primary"
-            label="Enkripsi & Simpan Semua Akun ke Database"
+            :label="`Enkripsi & Simpan (${validRowsToSave.length} Akun)`"
             :loading="isSubmitting"
-            :disabled="previewParsedLines.length === 0 || !selectedVariantId"
+            :disabled="validRowsToSave.length === 0 || !selectedVariantId"
             @click="handleUploadStocks"
           />
         </div>
       </div>
     </UCard>
 
-    <!-- KOLOM KANAN: PREVIEW BARIS & TOMBOL BUKA POP-UP KURANGI STOK -->
+    <!-- KOLOM KANAN: RINGKASAN FORMAT & POP-UP KURANGI STOK -->
     <div class="space-y-6">
       <UCard>
         <template #header>
           <h3 class="text-sm font-bold text-highlighted">
-            Preview Pembacaan Baris ({{ previewParsedLines.length }} Akun)
+            Panduan Format 2 Kolom & 3 Kolom
           </h3>
         </template>
 
-        <div
-          v-if="previewParsedLines.length === 0"
-          class="text-xs text-muted py-6 text-center"
-        >
-          Belum ada file `.txt` yang dimasukkan.
-        </div>
-
-        <div
-          v-else
-          class="max-h-60 overflow-y-auto space-y-2 pr-1"
-        >
-          <div
-            v-for="item in previewParsedLines"
-            :key="item.lineNumber"
-            class="p-2 rounded border text-xs font-mono"
-            :class="item.isValid ? 'border-default bg-elevated/40' : 'border-error bg-error/10'"
-          >
-            <div class="flex justify-between items-center">
-              <span class="font-bold">#{{ item.lineNumber }} {{ item.email }}</span>
-              <UBadge
-                :color="item.isValid ? 'success' : 'error'"
-                size="xs"
-                variant="subtle"
-              >
-                {{ item.isValid ? item.format : 'Invalid' }}
-              </UBadge>
+        <div class="space-y-3 text-xs text-muted leading-relaxed">
+          <p>
+            Jika kolom <strong>Link</strong> diisi, maka di halaman Invoice & Email pembeli akan otomatis muncul baris <strong>Link</strong>. Jika dikosongkan, hanya muncul Email dan Password.
+          </p>
+          <div class="p-2.5 rounded-lg bg-elevated border border-default font-mono text-[11px] space-y-1.5">
+            <div class="text-highlighted font-bold">
+              Contoh di file .txt:
             </div>
-            <div class="text-muted truncate">
-              PW: {{ item.password }} <span v-if="item.extraLink">| Link: {{ item.extraLink }}</span>
+            <div class="truncate">
+              62vy1o0l@acqf.poj.me|masuk123
+            </div>
+            <div class="truncate text-primary">
+              ewspyvens838@ydah.me | Masuk12345- | https://generator.email/...
             </div>
           </div>
         </div>
       </UCard>
 
-      <!-- KARTU PEMBUKA POP-UP PILIH & KELUARKAN STOK -->
       <UCard>
         <template #header>
           <div class="flex items-center justify-between">
@@ -385,7 +484,6 @@ async function handleConfirmRemoveSelectedStocks() {
     >
       <template #body>
         <div class="space-y-4">
-          <!-- HEADER NAMA PAKET & KONTROL INCREMENT / DECREMENT -->
           <div class="p-3.5 rounded-xl bg-elevated border border-default flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div class="truncate">
               <span class="text-xs text-muted block">Paket Terpilih:</span>
@@ -394,7 +492,6 @@ async function handleConfirmRemoveSelectedStocks() {
               </strong>
             </div>
 
-            <!-- TOMBOL DECREMENT [-] | COUNTER | INCREMENT [+] -->
             <div class="flex items-center gap-2 shrink-0">
               <UButton
                 color="neutral"
@@ -421,7 +518,6 @@ async function handleConfirmRemoveSelectedStocks() {
             </div>
           </div>
 
-          <!-- BARIS AKSI CEPAT PILIH SEMUA -->
           <div class="flex items-center justify-between text-xs px-1">
             <span class="text-muted">
               Daftar Akun Ready ({{ maxStockCount }} Stok):
@@ -436,7 +532,6 @@ async function handleConfirmRemoveSelectedStocks() {
             </button>
           </div>
 
-          <!-- AREA SCROLLABLE DAFTAR AKUN BESERTA CHECKBOX DI SAMPING KIRI -->
           <div
             v-if="isLoadingStocks"
             class="py-10 text-center text-xs text-muted"

@@ -1,12 +1,26 @@
 // ============================================================================
 // FILE: server/api/admin/stocks.post.ts
-// DESKRIPSI: Endpoint API Tambah Stok Massal (.txt) & Keluarkan Stok Terpilih
+// DESKRIPSI: Endpoint API Tambah Stok (Baris 3 Kolom: Email, Password, Link)
+//            & Keluarkan Stok Terpilih.
 // ============================================================================
 
 import { z } from 'zod'
 import { ProductStockRepository } from '../../services/ProductStockRepository'
 
 const stockActionSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('add_structured'),
+    variant_id: z.string().min(1, 'Pilih paket terlebih dahulu'),
+    items: z
+      .array(
+        z.object({
+          email: z.string().trim().min(3, 'Email wajib diisi'),
+          password: z.string().trim().min(1, 'Password wajib diisi'),
+          link: z.string().trim().nullable().optional()
+        })
+      )
+      .min(1, 'Minimal harus ada 1 baris stok akun')
+  }),
   z.object({
     action: z.literal('add_txt'),
     variant_id: z.string().min(1, 'Pilih paket terlebih dahulu'),
@@ -31,6 +45,16 @@ export default defineEventHandler(async (event) => {
   }
 
   const repo = new ProductStockRepository(event)
+
+  if (body.data.action === 'add_structured') {
+    const result = await repo.bulkAddStructuredStocks(body.data.variant_id, body.data.items)
+    return {
+      success: true,
+      insertedCount: result.insertedCount,
+      reducedCount: 0,
+      invalidLines: []
+    }
+  }
 
   if (body.data.action === 'add_txt') {
     const result = await repo.bulkAddStocksFromTxt(

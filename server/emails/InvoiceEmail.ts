@@ -1,7 +1,6 @@
 // ============================================================================
 // FILE: server/emails/InvoiceEmail.ts
-// DESKRIPSI: Komponen Vue-Email berbasis TypeScript Render Function (h)
-//            Menampilkan Email & Password Akun serta Link Invoice yang Valid.
+// DESKRIPSI: Komponen Vue-Email dengan Dukungan Kolom Ke-3 "Link" (Optional)
 // ============================================================================
 
 import { defineComponent, h } from 'vue'
@@ -16,7 +15,8 @@ import {
   Heading,
   Text,
   Hr,
-  Button
+  Button,
+  Link
 } from '@vue-email/components'
 
 export default defineComponent({
@@ -31,6 +31,7 @@ export default defineComponent({
     customGmailTarget: { type: [String, null] as PropType<string | null>, default: null },
     accountEmail: { type: [String, null] as PropType<string | null>, default: null },
     accountPassword: { type: [String, null] as PropType<string | null>, default: null },
+    accountExtraLink: { type: [String, null] as PropType<string | null>, default: null },
     usageRules: { type: String, required: true },
     invoiceUrl: { type: String, required: true }
   },
@@ -136,9 +137,25 @@ export default defineComponent({
                           ),
                           h(
                             Text,
-                            { style: { margin: '0', fontSize: '13px', color: '#f8fafc', fontFamily: 'monospace' } },
+                            { style: { margin: '0 0 6px 0', fontSize: '13px', color: '#f8fafc', fontFamily: 'monospace' } },
                             () => `Password: ${props.accountPassword || '-'}`
-                          )
+                          ),
+                          ...(props.accountExtraLink
+                            ? [
+                                h(
+                                  Text,
+                                  { style: { margin: '6px 0 0 0', fontSize: '13px', color: '#38bdf8', fontFamily: 'monospace' } },
+                                  () => [
+                                    'Link: ',
+                                    h(
+                                      Link,
+                                      { href: props.accountExtraLink || '#', style: { color: '#38bdf8', textDecoration: 'underline' } },
+                                      () => props.accountExtraLink
+                                    )
+                                  ]
+                                )
+                              ]
+                            : [])
                         ]
                 ),
 

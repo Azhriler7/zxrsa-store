@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/PackageSelectorSection.vue
- DESKRIPSI: Komponen Lego Pilih Paket dengan Desain Vertical-Linear SaaS
-            (Tanpa Bento Grid, 100% Dinamis, USkeleton Icon, & Responsif).
+ DESKRIPSI: Komponen Lego Pilih Paket Vertical-Linear (Menampilkan Deskripsi
+            Tiap Paket & Timer Kunci Stok 5 Menit).
 =========================================================================== -->
 <script setup lang="ts">
 import { z } from 'zod'
@@ -17,7 +17,6 @@ const toast = useToast()
 const selectedProductId = ref<string>(props.catalog[0]?.id || '')
 const selectedVariant = ref<PublicVariantItem | null>(null)
 
-// Jaga agar selectedProductId selalu sinkron jika data catalog baru selesai dimuat secara dinamis
 watch(
   () => props.catalog,
   (newCatalog) => {
@@ -130,9 +129,7 @@ function formatRupiah(val: number) {
     id="pilih-paket"
     class="scroll-mt-20 py-16 sm:py-20"
   >
-    <!-- STRICTLY VERTICAL-LINEAR CONTAINER (MAX-W-3XL) -->
     <UContainer class="max-w-3xl space-y-10">
-      <!-- SECTION HEADER -->
       <div class="text-center space-y-2.5">
         <UBadge
           color="primary"
@@ -150,7 +147,6 @@ function formatRupiah(val: number) {
         </p>
       </div>
 
-      <!-- EMPTY STATE JIKA ADMIN BELUM MENAMBAHKAN PRODUK -->
       <UCard
         v-if="!catalog.length"
         class="text-center py-10"
@@ -160,12 +156,11 @@ function formatRupiah(val: number) {
         </p>
       </UCard>
 
-      <!-- LINEAR FLOW CONTENT -->
       <div
         v-else
         class="space-y-8"
       >
-        <!-- LANGKAH 1: PILIH APLIKASI (HORIZONTAL SCROLLABLE PILL SELECTOR) -->
+        <!-- LANGKAH 1: PILIH APLIKASI -->
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold uppercase tracking-wider text-muted">
@@ -216,22 +211,14 @@ function formatRupiah(val: number) {
           </div>
         </div>
 
-        <!-- LANGKAH 2: VERTICAL-LINEAR PACKAGE LIST (NO BENTO GRID) -->
+        <!-- LANGKAH 2: VERTICAL-LINEAR PACKAGE LIST (DENGAN DESKRIPSI TIAP PAKET) -->
         <div
           v-if="currentProduct"
           class="space-y-3"
         >
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <span class="text-xs font-bold uppercase tracking-wider text-muted">
-              Langkah 2 — Pilih Durasi & Varian Paket ({{ currentProduct.name }})
-            </span>
-            <span
-              v-if="currentProduct.description"
-              class="text-xs text-muted truncate"
-            >
-              {{ currentProduct.description }}
-            </span>
-          </div>
+          <span class="text-xs font-bold uppercase tracking-wider text-muted block">
+            Langkah 2 — Pilih Durasi & Varian Paket ({{ currentProduct.name }})
+          </span>
 
           <div class="space-y-3">
             <div
@@ -246,11 +233,10 @@ function formatRupiah(val: number) {
               ]"
               @click="selectVariantRow(variant)"
             >
-              <!-- KIRI: RADIO INDICATOR + ICON + NAMA PAKET -->
-              <div class="flex items-center gap-3.5 min-w-0">
+              <div class="flex items-start sm:items-center gap-3.5 min-w-0">
                 <UIcon
                   :name="selectedVariant?.id === variant.id ? 'i-lucide-circle-check-big' : 'i-lucide-circle'"
-                  class="w-5 h-5 shrink-0 transition-colors"
+                  class="w-5 h-5 shrink-0 mt-1 sm:mt-0 transition-colors"
                   :class="selectedVariant?.id === variant.id ? 'text-primary' : 'text-muted'"
                 />
 
@@ -261,7 +247,7 @@ function formatRupiah(val: number) {
                   rounded-class="rounded-xl"
                 />
 
-                <div class="min-w-0 space-y-0.5">
+                <div class="min-w-0 space-y-1">
                   <div class="flex flex-wrap items-center gap-2">
                     <h3 class="font-bold text-sm sm:text-base text-highlighted">
                       {{ variant.name }}
@@ -283,6 +269,14 @@ function formatRupiah(val: number) {
                     </UBadge>
                   </div>
 
+                  <!-- DESKRIPSI KHUSUS TIAP PAKET -->
+                  <p
+                    v-if="variant.description"
+                    class="text-xs text-highlighted/85 leading-relaxed"
+                  >
+                    {{ variant.description }}
+                  </p>
+
                   <p class="text-xs text-muted flex items-center gap-1.5">
                     <UIcon
                       name="i-lucide-calendar-clock"
@@ -293,7 +287,6 @@ function formatRupiah(val: number) {
                 </div>
               </div>
 
-              <!-- KANAN: HARGA NORMAL CORET & HARGA EFEKTIF -->
               <div class="flex sm:flex-col items-baseline sm:items-end justify-between border-t sm:border-t-0 pt-2.5 sm:pt-0 border-default shrink-0">
                 <span class="text-xs text-muted sm:hidden">Harga Paket:</span>
                 <div class="text-right">
@@ -312,7 +305,7 @@ function formatRupiah(val: number) {
           </div>
         </div>
 
-        <!-- LANGKAH 3: VERTICAL CHECKOUT FORM (MUNCUL KETIKA PAKET DIPILIH) -->
+        <!-- LANGKAH 3: VERTICAL CHECKOUT FORM -->
         <div
           v-if="selectedVariant && currentProduct"
           class="space-y-3 pt-2"
@@ -336,7 +329,7 @@ function formatRupiah(val: number) {
                       {{ currentProduct.name }} — {{ selectedVariant.name }}
                     </h3>
                     <p class="text-xs text-muted">
-                      Durasi {{ selectedVariant.duration }} • Pengiriman Otomatis
+                      Durasi {{ selectedVariant.duration }} • Kunci Stok 5 Menit
                     </p>
                   </div>
                 </div>
@@ -415,8 +408,8 @@ function formatRupiah(val: number) {
 
       <CommonConfirmDialog
         v-model:open="isConfirmCheckoutOpen"
-        title="Konfirmasi Pemesanan & Kunci Stok"
-        :description="`Sistem akan mengunci stok paket '${selectedVariant?.name}' selama 10 menit dan mengirimkan Invoice ke '${formState.customer_email}'. Lanjutkan ke pembayaran QRIS?`"
+        title="Konfirmasi Pemesanan & Kunci Stok (5 Menit)"
+        :description="`Sistem akan mengunci stok paket '${selectedVariant?.name}' selama 5 menit dan mengirimkan Invoice ke '${formState.customer_email}'. Lanjutkan ke pembayaran QRIS?`"
         confirm-label="Ya, Buat QRIS Sekarang"
         confirm-color="primary"
         :loading="isCreatingInvoice"
