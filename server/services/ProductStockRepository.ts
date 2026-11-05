@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: server/services/ProductStockRepository.ts
-// DESKRIPSI: Repository OOP untuk CRUD Produk, Paket (dengan Deskripsi Paket),
-//            & Input Stok Dinamis 3 Kolom (Email, Password, Link Optional).
+// DESKRIPSI: Repository OOP untuk CRUD Produk & Paket (Dilengkapi Kolom
+//            Aturan / usage_rules dan Tutorial / tutorial_text di Tiap Paket).
 // ============================================================================
 
 import type { DbProduct, DbProductVariant } from '../types/database'
@@ -49,13 +49,10 @@ export class ProductStockRepository extends BaseRepository {
     }))
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: CREATE OR UPDATE PRODUCT (TANPA DESKRIPSI PRODUK)]
-  // --------------------------------------------------------------------------
   public async upsertProduct(payload: {
     id?: string
     name: string
-    usage_rules: string
+    usage_rules?: string
     image_url?: string | null
     promo_badge?: string | null
     is_active: boolean
@@ -69,6 +66,8 @@ export class ProductStockRepository extends BaseRepository {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '')
     const autoSlug = `${baseSlug}-${productId.slice(-4)}`
+
+    const defaultRules = payload.usage_rules?.trim() || 'Patuhi aturan pemakaian sesuai paket yang dipilih.'
 
     await this.db
       .prepare(
@@ -88,7 +87,7 @@ export class ProductStockRepository extends BaseRepository {
         productId,
         payload.name.trim(),
         autoSlug,
-        payload.usage_rules.trim(),
+        defaultRules,
         payload.image_url || null,
         payload.promo_badge || null,
         activeInt
@@ -138,7 +137,7 @@ export class ProductStockRepository extends BaseRepository {
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: CREATE OR UPDATE VARIANT (DENGAN DESKRIPSI TIAP PAKET)]
+  // [SECTION: CREATE OR UPDATE VARIANT (DENGAN ATURAN & TUTORIAL TIAP PAKET)]
   // --------------------------------------------------------------------------
   public async upsertVariant(payload: {
     id?: string
@@ -146,6 +145,8 @@ export class ProductStockRepository extends BaseRepository {
     name: string
     duration: string
     description?: string | null
+    usage_rules?: string | null
+    tutorial_text?: string | null
     price: number
     promo_price?: number | null
     promo_day_of_week?: string | null
@@ -160,15 +161,17 @@ export class ProductStockRepository extends BaseRepository {
     await this.db
       .prepare(
         `INSERT INTO product_variants (
-           id, product_id, name, duration, description, price, promo_price,
-           promo_day_of_week, promo_specific_date, promo_start_at, promo_end_at,
-           is_custom_gmail, is_active, updated_at
+           id, product_id, name, duration, description, usage_rules, tutorial_text,
+           price, promo_price, promo_day_of_week, promo_specific_date,
+           promo_start_at, promo_end_at, is_custom_gmail, is_active, updated_at
          )
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'))
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, datetime('now'))
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            duration = excluded.duration,
            description = excluded.description,
+           usage_rules = excluded.usage_rules,
+           tutorial_text = excluded.tutorial_text,
            price = excluded.price,
            promo_price = excluded.promo_price,
            promo_day_of_week = excluded.promo_day_of_week,
@@ -185,6 +188,8 @@ export class ProductStockRepository extends BaseRepository {
         payload.name.trim(),
         payload.duration.trim(),
         payload.description?.trim() || null,
+        payload.usage_rules?.trim() || null,
+        payload.tutorial_text?.trim() || null,
         Math.floor(payload.price),
         payload.promo_price ? Math.floor(payload.promo_price) : null,
         payload.promo_day_of_week || null,
@@ -220,9 +225,6 @@ export class ProductStockRepository extends BaseRepository {
     await this.writeSystemLog('warn', 'VARIANT_CRUD', `Hapus varian paket ID: ${variantId}`)
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: BULK ADD STOCKS DARI BARIS INPUT (EMAIL, PASSWORD, LINK OPTIONAL)]
-  // --------------------------------------------------------------------------
   public async bulkAddStructuredStocks(
     variantId: string,
     items: { email: string, password: string, link?: string | null }[]

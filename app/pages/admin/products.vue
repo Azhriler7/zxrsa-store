@@ -1,6 +1,7 @@
 <!-- ==========================================================================
  FILE: app/pages/admin/products.vue
- DESKRIPSI: Halaman Admin CRUD Produk & Paket (Deskripsi Tampil di Tiap Paket)
+ DESKRIPSI: Halaman Admin CRUD Produk & Paket (Menampilkan Kolom Aturan &
+            Kolom Tutorial di Tabel Paket).
 =========================================================================== -->
 <script setup lang="ts">
 import type { ProductFormInitialData } from '~/components/admin/ProductFormModal.vue'
@@ -54,7 +55,6 @@ function openAddProduct() {
 function openEditProduct(prod: {
   id: string
   name: string
-  usage_rules: string
   image_url: string | null
   promo_badge: string | null
   is_active: 0 | 1
@@ -73,6 +73,8 @@ function openAddVariant(productId: string, productName: string) {
     name: '',
     duration: '30 Hari',
     description: '',
+    usage_rules: '1. Dilarang mengubah password atau profil akun.\n2. Gunakan sesuai batas perangkat yang ditentukan.\n3. Melanggar aturan akan menghanguskan garansi.',
+    tutorial_text: '1. Buka aplikasi dan pilih menu Login.\n2. Masukkan Email & Password yang tertera pada Invoice.\n3. Jika diminta kode OTP, klik Link yang tersedia di Invoice.',
     price: 20000,
     promo_price: null,
     promo_day_of_week: null,
@@ -91,6 +93,8 @@ function openEditVariant(productName: string, v: {
   name: string
   duration: string
   description: string | null
+  usage_rules: string | null
+  tutorial_text: string | null
   price: number
   promo_price: number | null
   promo_day_of_week: string | null
@@ -182,10 +186,10 @@ function formatRupiah(val: number) {
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold text-highlighted">
-          Manajemen Produk, Paket & Waktu Promo
+          Manajemen Produk, Paket, Aturan & Tutorial
         </h1>
         <p class="text-sm text-muted">
-          Kelola aplikasi premium beserta icon dari GitHub CDN, deskripsi tiap paket, dan jadwal promo harian/tanggal.
+          Kelola aplikasi premium beserta aturan garansi, tutorial pemakaian, dan jadwal promo di setiap paket.
         </p>
       </div>
 
@@ -296,7 +300,7 @@ function formatRupiah(val: number) {
             <thead>
               <tr class="border-b border-default text-xs text-muted uppercase">
                 <th class="py-2 px-3">
-                  Nama & Deskripsi Paket
+                  Nama Paket
                 </th>
                 <th class="py-2 px-3">
                   Durasi
@@ -306,6 +310,12 @@ function formatRupiah(val: number) {
                 </th>
                 <th class="py-2 px-3">
                   Harga Promo & Jadwal Aktif
+                </th>
+                <th class="py-2 px-3">
+                  Aturan
+                </th>
+                <th class="py-2 px-3">
+                  Tutorial
                 </th>
                 <th class="py-2 px-3">
                   Tipe
@@ -323,7 +333,7 @@ function formatRupiah(val: number) {
                 v-for="v in prod.variants"
                 :key="v.id"
               >
-                <td class="py-2.5 px-3 max-w-xs">
+                <td class="py-2.5 px-3 max-w-45">
                   <div class="font-bold text-highlighted">
                     {{ v.name }}
                   </div>
@@ -378,6 +388,37 @@ function formatRupiah(val: number) {
                     class="text-xs text-muted"
                   >OFF (Harga Normal)</span>
                 </td>
+
+                <!-- KOLOM ATURAN (TEKS) -->
+                <td class="py-2.5 px-3 max-w-45">
+                  <p
+                    v-if="v.usage_rules"
+                    class="text-xs text-muted line-clamp-2 whitespace-pre-line"
+                    :title="v.usage_rules"
+                  >
+                    {{ v.usage_rules }}
+                  </p>
+                  <span
+                    v-else
+                    class="text-xs text-muted italic"
+                  >-</span>
+                </td>
+
+                <!-- KOLOM TUTORIAL (TEKS) -->
+                <td class="py-2.5 px-3 max-w-45">
+                  <p
+                    v-if="v.tutorial_text"
+                    class="text-xs text-muted line-clamp-2 whitespace-pre-line"
+                    :title="v.tutorial_text"
+                  >
+                    {{ v.tutorial_text }}
+                  </p>
+                  <span
+                    v-else
+                    class="text-xs text-muted italic"
+                  >-</span>
+                </td>
+
                 <td class="py-2.5 px-3 whitespace-nowrap">
                   <UBadge
                     :color="v.is_custom_gmail ? 'warning' : 'primary'"

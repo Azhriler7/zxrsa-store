@@ -1,6 +1,7 @@
 // ============================================================================
 // FILE: server/api/admin/variants.post.ts
-// DESKRIPSI: Endpoint POST Tambah / Update Varian Paket (Dengan Deskripsi Paket)
+// DESKRIPSI: Endpoint POST Tambah / Update Varian Paket (Dengan Deskripsi,
+//            Aturan / usage_rules, dan Tutorial / tutorial_text).
 // ============================================================================
 
 import { z } from 'zod'
@@ -12,6 +13,8 @@ const upsertVariantSchema = z.object({
   name: z.string().min(2, 'Nama paket minimal 2 karakter'),
   duration: z.string().min(2, 'Durasi wajib diisi'),
   description: z.string().nullable().optional(),
+  usage_rules: z.string().nullable().optional(),
+  tutorial_text: z.string().nullable().optional(),
   price: z.coerce.number().int().positive('Harga normal harus lebih dari Rp 0'),
   promo_price: z.coerce.number().int().positive().nullable().optional(),
   promo_day_of_week: z.string().nullable().optional(),

@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/admin/VariantPromoModal.vue
- DESKRIPSI: Komponen Lego Modal CRUD Paket Varian (Dilengkapi Deskripsi Paket,
-            Master Switch Promo, & Promo Harian Berulang).
+ DESKRIPSI: Komponen Lego Modal CRUD Paket Varian (Dilengkapi Deskripsi,
+            CRUD Aturan Pemakaian, CRUD Tutorial Penggunaan, & Jadwal Promo).
 =========================================================================== -->
 <script setup lang="ts">
 export interface VariantModalInitialData {
@@ -11,6 +11,8 @@ export interface VariantModalInitialData {
   name: string
   duration: string
   description?: string | null
+  usage_rules?: string | null
+  tutorial_text?: string | null
   price: number
   promo_price: number | null
   promo_day_of_week?: string | null
@@ -51,10 +53,15 @@ const minTodayDateTime = computed(() => {
   return local.toISOString().slice(0, 16)
 })
 
+const DEFAULT_RULES = '1. Dilarang mengubah password atau profil akun.\n2. Gunakan sesuai batas perangkat yang ditentukan.\n3. Melanggar aturan akan menghanguskan garansi.'
+const DEFAULT_TUTORIAL = '1. Buka aplikasi dan pilih menu Login.\n2. Masukkan Email & Password yang tertera pada Invoice.\n3. Jika diminta kode OTP, klik Link yang tersedia di Invoice.'
+
 const state = reactive({
   name: '',
   duration: '30 Hari',
   description: '',
+  usage_rules: DEFAULT_RULES,
+  tutorial_text: DEFAULT_TUTORIAL,
   price: 20000,
   promo_price: null as number | null,
   promo_specific_date: '',
@@ -77,6 +84,8 @@ watch(
       state.name = props.initialData.name
       state.duration = props.initialData.duration
       state.description = props.initialData.description || ''
+      state.usage_rules = props.initialData.usage_rules || DEFAULT_RULES
+      state.tutorial_text = props.initialData.tutorial_text || DEFAULT_TUTORIAL
       state.price = props.initialData.price
       state.promo_price = props.initialData.promo_price
       state.promo_specific_date = props.initialData.promo_specific_date || ''
@@ -190,6 +199,8 @@ async function handleSaveVariant() {
         name: state.name.trim(),
         duration: state.duration.trim(),
         description: state.description.trim() || null,
+        usage_rules: state.usage_rules.trim() || null,
+        tutorial_text: state.tutorial_text.trim() || null,
         price: Math.floor(Number(state.price)),
         promo_price: finalPromoPrice,
         promo_day_of_week: finalDayOfWeek,
@@ -202,8 +213,8 @@ async function handleSaveVariant() {
     })
 
     toast.add({
-      title: 'Paket & Promo Tersimpan',
-      description: `Paket ${state.name} berhasil diperbarui.`,
+      title: 'Paket Tersimpan',
+      description: `Paket ${state.name} beserta aturan & tutorial berhasil disimpan.`,
       color: 'success',
       icon: 'i-lucide-check-circle'
     })
@@ -222,11 +233,11 @@ async function handleSaveVariant() {
 <template>
   <UModal
     v-model:open="isOpen"
-    :title="initialData?.id ? 'Edit Paket & Pengaturan Promo' : `Tambah Paket (${initialData?.product_name || ''})`"
-    description="Atur nama paket, deskripsi keuntungan paket, harga normal, serta jadwal promo."
+    :title="initialData?.id ? 'Edit Paket, Aturan, Tutorial & Promo' : `Tambah Paket (${initialData?.product_name || ''})`"
+    description="Atur informasi paket, aturan garansi, tutorial login, dan jadwal promo."
   >
     <template #body>
-      <div class="space-y-4">
+      <div class="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <UFormField
             label="Nama Paket"
@@ -251,13 +262,32 @@ async function handleSaveVariant() {
           </UFormField>
         </div>
 
-        <!-- DESKRIPSI KHUSUS TIAP PAKET -->
-        <UFormField label="Deskripsi Paket (Tampil di Bawah Nama Paket)">
+        <UFormField label="Deskripsi Singkat Paket (Tampil di Katalog)">
           <UTextarea
             v-model="state.description"
             :rows="2"
             class="w-full"
-            placeholder="Contoh: Akun private 1 perangkat, bebas ekspor 4K tanpa watermark & full garansi."
+            placeholder="Contoh: Akun private 1 perangkat, bebas ekspor 4K tanpa watermark."
+          />
+        </UFormField>
+
+        <!-- INPUT CRUD ATURAN (TEKS) -->
+        <UFormField label="Aturan Pemakaian & Garansi Paket (Dikirim ke Invoice & Gmail)">
+          <UTextarea
+            v-model="state.usage_rules"
+            :rows="3"
+            class="w-full font-mono text-xs"
+            placeholder="1. Dilarang mengubah password..."
+          />
+        </UFormField>
+
+        <!-- INPUT CRUD TUTORIAL (TEKS) -->
+        <UFormField label="Tutorial Cara Login / Pemakaian (Dikirim ke Invoice Setelah Lunas & Gmail)">
+          <UTextarea
+            v-model="state.tutorial_text"
+            :rows="3"
+            class="w-full font-mono text-xs"
+            placeholder="1. Buka aplikasi lalu pilih Login dengan Email..."
           />
         </UFormField>
 
@@ -272,6 +302,7 @@ async function handleSaveVariant() {
           />
         </UFormField>
 
+        <!-- PENGATURAN PROMO -->
         <div class="p-4 rounded-xl border border-default bg-elevated/50 space-y-4">
           <div class="flex items-center justify-between gap-3">
             <div>
@@ -283,7 +314,7 @@ async function handleSaveVariant() {
                 Status Promo Paket Ini
               </span>
               <span class="text-xs text-muted block">
-                Matikan jika paket ini menggunakan Harga Normal saja (Tanpa Promo)
+                Matikan jika paket ini menggunakan Harga Normal saja
               </span>
             </div>
 
@@ -320,7 +351,7 @@ async function handleSaveVariant() {
                     Promo Harian Berulang
                   </span>
                   <span class="text-[11px] text-muted">
-                    Otomatis ubah harga menjadi promo setiap hari yang dilingkari (Misal: F = Setiap Jumat)
+                    Otomatis ubah harga menjadi promo setiap hari yang dilingkari
                   </span>
                 </div>
                 <UButton

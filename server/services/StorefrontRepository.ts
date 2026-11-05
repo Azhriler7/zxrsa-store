@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: server/services/StorefrontRepository.ts
-// DESKRIPSI: Repository OOP Katalog Publik (Deskripsi per Paket), Timer Kunci
-//            Stok 5 Menit, dan Query Invoice Eksplisit Anti-Error 500.
+// DESKRIPSI: Repository OOP Katalog Publik (Deskripsi, Aturan, & Tutorial
+//            per Paket), Timer 5 Menit, & Invoice Setelah Lunas.
 // ============================================================================
 
 import type { DbProduct, DbProductVariant, TransactionStatus } from '../types/database'
@@ -18,6 +18,8 @@ export interface PublicVariantItem {
   name: string
   duration: string
   description: string | null
+  usage_rules: string | null
+  tutorial_text: string | null
   original_price: number
   effective_price: number
   is_promo_active: boolean
@@ -140,6 +142,8 @@ export class StorefrontRepository extends BaseRepository {
             name: v.name,
             duration: v.duration,
             description: v.description || null,
+            usage_rules: v.usage_rules || prod.usage_rules || null,
+            tutorial_text: v.tutorial_text || null,
             original_price: v.price,
             effective_price: promoActive && v.promo_price ? v.promo_price : v.price,
             is_promo_active: promoActive,
@@ -150,9 +154,6 @@ export class StorefrontRepository extends BaseRepository {
     }))
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: CREATE CHECKOUT INVOICE (TIMER DIUBAH MENJADI 5 MENIT)]
-  // --------------------------------------------------------------------------
   public async createCheckoutInvoice(payload: {
     variantId: string
     customerEmail: string
@@ -183,7 +184,6 @@ export class StorefrontRepository extends BaseRepository {
       })
     }
 
-    // TIMER PEMBAYARAN QRIS & KUNCI STOK: 5 MENIT
     const expiresDate = new Date(Date.now() + 5 * 60 * 1000)
     const expiresIso = expiresDate.toISOString()
 
@@ -218,8 +218,10 @@ export class StorefrontRepository extends BaseRepository {
 
     const promoActive = this.isPromoCurrentlyActive(variant)
     const baseAmount = promoActive && variant.promo_price ? variant.promo_price : variant.price
-    const uniqueCode = QrisDynamicService.generateUniqueCode(1, 299)
-    const totalAmount = baseAmount + uniqueCode
+    // Rumus: Total Tagihan = Harga Produk + 0,3% Biaya Layanan + Kode Unik (1 s/d 199)
+    const serviceFee = Math.ceil(baseAmount * 0.003)
+    const uniqueCode = QrisDynamicService.generateUniqueCode(1, 199)
+    const totalAmount = baseAmount + serviceFee + uniqueCode
 
     const config = useRuntimeConfig(this.event)
     let qrisDynamicString = `00020101021226580014ID.CO.QRIS.WWW01189360091431234567890215ID10200211123450303UMI51440014ID.CO.QRIS.WWW0215ID10200211123450303UMI52045499530336054${totalAmount.toString().length.toString().padStart(2, '0')}${totalAmount}5802ID5911ZXRSA STORE6007JAKARTA6304ABCD`
@@ -262,14 +264,11 @@ export class StorefrontRepository extends BaseRepository {
     return { invoiceId, invoiceToken }
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: GET INVOICE BY TOKEN (EKSPLISIT KOLOM & ANTI-ERROR 500)]
-  // --------------------------------------------------------------------------
   public async getInvoiceByToken(token: string) {
     try {
       await this.releaseExpiredLocks()
     } catch {
-      // Abaikan jika lock release gagal agar pembacaan invoice tidak pernah 500
+      // Abaikan jika lock release gagal
     }
 
     const cleanToken = decodeURIComponent(token || '').trim()
@@ -294,7 +293,8 @@ export class StorefrontRepository extends BaseRepository {
            t.paid_at,
            t.created_at,
            COALESCE(p.name, 'Aplikasi Premium ZXRSA') as product_name,
-           COALESCE(p.usage_rules, '1. Dilarang mengubah password akun.\n2. Garansi penuh sesuai durasi paket.') as usage_rules,
+           COALESCE(pv.usage_rules, p.usage_rules, '1. Dilarang mengubah password akun.\n2. Garansi penuh sesuai durasi paket.') as usage_rules,
+           pv.tutorial_text as tutorial_text,
            COALESCE(pv.name, 'Paket Premium') as variant_name,
            COALESCE(pv.duration, '30 Hari') as duration,
            pv.description as variant_description,
@@ -338,7 +338,6 @@ export class StorefrontRepository extends BaseRepository {
           extraInfoLink: parsed.extraInfoLink
         }
       } catch {
-        // Fallback jika data sudah plaintext atau kunci berbeda
         const fallbackParsed = new StockParserService().parseSingleDecryptedString(tx.delivered_account_data)
         decryptedAccount = {
           email: fallbackParsed.email,
@@ -359,6 +358,12 @@ export class StorefrontRepository extends BaseRepository {
       hasReviewed = false
     }
 
+    const baseAmt = Number(tx.base_amount || 0)
+    const uniqueAmt = Number(tx.unique_code || 0)
+    const totalAmt = Number(tx.total_amount || 0)
+    // Selisih antara totalAmt - baseAmt - uniqueAmt adalah Biaya 0,3%
+    const serviceFeeAmt = Math.max(0, totalAmt - baseAmt - uniqueAmt)
+
     return {
       id: tx.id,
       invoice_token: tx.invoice_token,
@@ -369,11 +374,13 @@ export class StorefrontRepository extends BaseRepository {
       variant_description: tx.variant_description || null,
       duration: tx.duration,
       usage_rules: tx.usage_rules,
+      tutorial_text: tx.tutorial_text || null,
       is_custom_gmail: Number(tx.is_custom_gmail) === 1,
       custom_gmail_status: tx.custom_gmail_status,
-      base_amount: Number(tx.base_amount || 0),
-      unique_code: Number(tx.unique_code || 0),
-      total_amount: Number(tx.total_amount || 0),
+      base_amount: baseAmt,
+      service_fee: serviceFeeAmt,
+      unique_code: uniqueAmt,
+      total_amount: totalAmt,
       status: tx.status as TransactionStatus,
       qris_dynamic_string: tx.qris_dynamic_string || '',
       expires_at: tx.expires_at,
@@ -390,11 +397,16 @@ export class StorefrontRepository extends BaseRepository {
     const matchedTx = await this.db
       .prepare(
         `SELECT 
-           t.*, p.name as product_name, p.usage_rules,
-           pv.name as variant_name, pv.duration, pv.is_custom_gmail
+           t.*,
+           COALESCE(p.name, 'Aplikasi Premium') as product_name,
+           COALESCE(pv.usage_rules, p.usage_rules, '-') as usage_rules,
+           pv.tutorial_text as tutorial_text,
+           COALESCE(pv.name, 'Paket Premium') as variant_name,
+           COALESCE(pv.duration, '-') as duration,
+           COALESCE(pv.is_custom_gmail, 0) as is_custom_gmail
          FROM transactions t
-         JOIN product_variants pv ON pv.id = t.variant_id
-         JOIN products p ON p.id = pv.product_id
+         LEFT JOIN product_variants pv ON pv.id = t.variant_id
+         LEFT JOIN products p ON p.id = pv.product_id
          WHERE t.status = 'pending'
            AND t.total_amount = ?1
            AND datetime(t.expires_at) > datetime('now')

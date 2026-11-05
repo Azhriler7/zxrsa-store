@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: server/services/EmailService.ts
-// DESKRIPSI: Service OOP untuk merender template @vue-email dan memastikan
-//            URL Invoice Resmi selalu valid mengarah ke domain utama.
+// DESKRIPSI: Service OOP untuk merender template @vue-email (Beserta Aturan
+//            dan Tutorial Paket) untuk dikirim ke Gmail Pembeli.
 // ============================================================================
 
 import { render } from '@vue-email/render'
@@ -21,6 +21,7 @@ export interface SendInvoiceEmailPayload {
   accountPassword?: string | null
   accountExtraLink?: string | null
   usageRules: string
+  tutorialText?: string | null
 }
 
 export class EmailService {
@@ -61,6 +62,7 @@ export class EmailService {
       accountPassword: payload.accountPassword ?? null,
       accountExtraLink: payload.accountExtraLink ?? null,
       usageRules: payload.usageRules,
+      tutorialText: payload.tutorialText ?? null,
       invoiceUrl
     })
 

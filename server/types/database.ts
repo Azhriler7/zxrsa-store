@@ -63,6 +63,8 @@ export interface DbProductVariant {
   name: string
   duration: string
   description: string | null
+  usage_rules: string | null
+  tutorial_text: string | null
   price: number
   promo_price: number | null
   promo_day_of_week: string | null

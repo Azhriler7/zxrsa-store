@@ -1,6 +1,6 @@
 // ============================================================================
 // FILE: server/api/admin/products.post.ts
-// DESKRIPSI: Endpoint POST Tambah / Update Produk (Slug Otomatis dari Nama)
+// DESKRIPSI: Endpoint POST Tambah / Update Produk Aplikasi
 // ============================================================================
 
 import { z } from 'zod'
@@ -9,8 +9,7 @@ import { ProductStockRepository } from '../../services/ProductStockRepository'
 const upsertProductSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2, 'Nama produk minimal 2 karakter'),
-  description: z.string().nullable().optional(),
-  usage_rules: z.string().min(5, 'Aturan pemakaian wajib diisi minimal 5 karakter'),
+  usage_rules: z.string().optional(),
   image_url: z.string().nullable().optional(),
   promo_badge: z.string().nullable().optional(),
   is_active: z.boolean().default(true)

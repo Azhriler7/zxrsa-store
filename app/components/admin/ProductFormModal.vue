@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/admin/ProductFormModal.vue
- DESKRIPSI: Komponen Lego Modal Form CRUD Produk Aplikasi (Deskripsi Dipindahkan
-            ke Tiap Paket Varian).
+ DESKRIPSI: Komponen Lego Modal Form CRUD Produk Aplikasi (Aturan & Tutorial
+            kini berada di tiap Paket).
 =========================================================================== -->
 <script setup lang="ts">
 import { z } from 'zod'
@@ -10,7 +10,6 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 export interface ProductFormInitialData {
   id?: string
   name: string
-  usage_rules: string
   image_url?: string | null
   promo_badge: string | null
   is_active: boolean
@@ -51,7 +50,6 @@ const defaultPlaceholderUrl = computed(() =>
 
 const schema = z.object({
   name: z.string().min(2, 'Nama aplikasi wajib diisi'),
-  usage_rules: z.string().min(5, 'Aturan pemakaian wajib diisi untuk ditampilkan di Invoice'),
   image_url: z.string().optional(),
   promo_badge: z.string().optional(),
   is_active: z.boolean()
@@ -61,7 +59,6 @@ type Schema = z.output<typeof schema>
 
 const state = reactive<Schema>({
   name: '',
-  usage_rules: '1. Dilarang mengubah password atau profil akun.\n2. Gunakan sesuai batas perangkat yang ditentukan.\n3. Melanggar aturan akan menghanguskan garansi.',
   image_url: '',
   promo_badge: '',
   is_active: true
@@ -72,13 +69,11 @@ watch(
   () => {
     if (props.initialData) {
       state.name = props.initialData.name
-      state.usage_rules = props.initialData.usage_rules
       state.image_url = props.initialData.image_url || defaultPlaceholderUrl.value
       state.promo_badge = props.initialData.promo_badge || ''
       state.is_active = props.initialData.is_active
     } else {
       state.name = ''
-      state.usage_rules = '1. Dilarang mengubah password atau profil akun.\n2. Gunakan sesuai batas perangkat yang ditentukan.\n3. Melanggar aturan akan menghanguskan garansi.'
       state.image_url = defaultPlaceholderUrl.value
       state.promo_badge = ''
       state.is_active = true
@@ -124,7 +119,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   <UModal
     v-model:open="isOpen"
     :title="initialData?.id ? 'Edit Aplikasi Premium' : 'Tambah Aplikasi Premium Baru'"
-    description="Pilih icon aplikasi dari dropdown GitHub/jsDelivr CDN dan atur ketentuan garansi."
+    description="Pilih nama dan icon aplikasi dari GitHub CDN. (Aturan & Tutorial diatur pada tiap paket)."
   >
     <template #body>
       <UForm
@@ -240,18 +235,6 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
             </select>
           </UFormField>
         </div>
-
-        <UFormField
-          label="Aturan Pemakaian & Garansi (Muncul di Invoice & Email)"
-          name="usage_rules"
-          required
-        >
-          <UTextarea
-            v-model="state.usage_rules"
-            :rows="4"
-            class="w-full font-mono text-xs"
-          />
-        </UFormField>
 
         <div class="flex items-center justify-between pt-2">
           <UCheckbox
