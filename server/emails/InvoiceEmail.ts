@@ -1,6 +1,7 @@
 // ============================================================================
 // FILE: server/emails/InvoiceEmail.ts
-// DESKRIPSI: Komponen Vue-Email dengan Dukungan Kolom Ke-3 "Link" (Optional)
+// DESKRIPSI: Komponen Vue-Email dengan Dukungan Aturan Pemakaian & Tutorial
+//            Penggunaan Paket yang dikirim ke Gmail Pembeli.
 // ============================================================================
 
 import { defineComponent, h } from 'vue'
@@ -33,6 +34,7 @@ export default defineComponent({
     accountPassword: { type: [String, null] as PropType<string | null>, default: null },
     accountExtraLink: { type: [String, null] as PropType<string | null>, default: null },
     usageRules: { type: String, required: true },
+    tutorialText: { type: [String, null] as PropType<string | null>, default: null },
     invoiceUrl: { type: String, required: true }
   },
   setup(props) {
@@ -159,6 +161,25 @@ export default defineComponent({
                         ]
                 ),
 
+                // SECTION TUTORIAL PENGGUNAAN (MUNCUL JIKA DIISI ADMIN PADA PAKET)
+                ...(props.tutorialText
+                  ? [
+                      h(Section, { style: { marginTop: '20px' } }, () => [
+                        h(
+                          Heading,
+                          { as: 'h4', style: { color: '#38bdf8', margin: '0 0 6px 0', fontSize: '14px' } },
+                          () => 'Panduan / Tutorial Penggunaan:'
+                        ),
+                        h(
+                          Text,
+                          { style: { margin: '0', fontSize: '12px', color: '#cbd5e1', whiteSpace: 'pre-line', lineHeight: '1.6' } },
+                          () => props.tutorialText
+                        )
+                      ])
+                    ]
+                  : []),
+
+                // SECTION ATURAN PEMAKAIAN
                 h(Section, { style: { marginTop: '20px' } }, () => [
                   h(
                     Heading,

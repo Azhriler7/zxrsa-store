@@ -44,13 +44,25 @@ watch(
   { immediate: true }
 )
 
+// Polling cepat setiap 2.5 detik selama masih pending
 const { pause } = useIntervalFn(async () => {
   if (data.value?.invoice?.status === 'pending') {
     await refresh()
   } else {
     pause()
   }
-}, 4000)
+}, 2500)
+
+// INSTANT TRIGGER: Begitu pembeli selesai bayar di aplikasi DANA/Bank lalu kembali ke tab browser, langsung cek detik itu juga!
+onMounted(() => {
+  const handleVisibilityOrFocus = () => {
+    if (document.visibilityState === 'visible' && data.value?.invoice?.status === 'pending') {
+      refresh()
+    }
+  }
+  window.addEventListener('visibilitychange', handleVisibilityOrFocus)
+  window.addEventListener('focus', handleVisibilityOrFocus)
+})
 
 function formatRupiah(val: number) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val)

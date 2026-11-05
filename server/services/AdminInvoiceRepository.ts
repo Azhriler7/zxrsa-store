@@ -1,14 +1,14 @@
 // ============================================================================
 // FILE: server/services/AdminInvoiceRepository.ts
-// DESKRIPSI: Repository OOP untuk CRUD Invoice, History Pembelian, Penyelesaian
-//            Transaksi (Atomic Stock Delivery), & Konfirmasi Custom Gmail.
+// DESKRIPSI: Repository OOP untuk Manajemen Invoice Admin, Pengiriman Akun,
+//            serta Pengiriman Aturan & Tutorial Paket ke Email Gmail Pembeli.
 // ============================================================================
 
-import type { TransactionStatus } from '../types/database'
+import type { CustomGmailStatus, TransactionStatus } from '../types/database'
 import { BaseRepository } from './BaseRepository'
 import { CryptoService } from './CryptoService'
-import { StockParserService } from './StockParserService'
 import { EmailService } from './EmailService'
+import { StockParserService } from './StockParserService'
 
 export interface AdminTransactionRow {
   id: string
@@ -21,23 +21,20 @@ export interface AdminTransactionRow {
   unique_code: number
   total_amount: number
   status: TransactionStatus
-  custom_gmail_status: 'not_applicable' | 'waiting_admin' | 'completed'
+  custom_gmail_status: CustomGmailStatus
   expires_at: string
   paid_at: string | null
   email_sent_at: string | null
   created_at: string
   product_name: string
   usage_rules: string
+  tutorial_text: string | null
   variant_name: string
   duration: string
   is_custom_gmail: 0 | 1
 }
 
 export class AdminInvoiceRepository extends BaseRepository {
-  // --------------------------------------------------------------------------
-  // [SECTION: GET ALL INVOICES / PURCHASE HISTORY (SAFE LEFT JOIN)]
-  // Tetap aman dibuka meskipun tabel kosong atau produk lama telah dihapus
-  // --------------------------------------------------------------------------
   public async getAllInvoices(statusFilter?: string): Promise<AdminTransactionRow[]> {
     const baseQuery = `
       SELECT 
@@ -46,7 +43,8 @@ export class AdminInvoiceRepository extends BaseRepository {
         t.total_amount, t.status, t.custom_gmail_status, t.expires_at,
         t.paid_at, t.email_sent_at, t.created_at,
         COALESCE(p.name, 'Produk Dihapus') as product_name,
-        COALESCE(p.usage_rules, '-') as usage_rules,
+        COALESCE(pv.usage_rules, p.usage_rules, '-') as usage_rules,
+        pv.tutorial_text as tutorial_text,
         COALESCE(pv.name, 'Paket Dihapus') as variant_name,
         COALESCE(pv.duration, '-') as duration,
         COALESCE(pv.is_custom_gmail, 0) as is_custom_gmail
@@ -70,9 +68,6 @@ export class AdminInvoiceRepository extends BaseRepository {
     return results || []
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: GET CUSTOM GMAIL QUEUE (SAFE LEFT JOIN)]
-  // --------------------------------------------------------------------------
   public async getCustomGmailQueue(): Promise<AdminTransactionRow[]> {
     const { results } = await this.db
       .prepare(
@@ -82,7 +77,8 @@ export class AdminInvoiceRepository extends BaseRepository {
            t.total_amount, t.status, t.custom_gmail_status, t.expires_at,
            t.paid_at, t.email_sent_at, t.created_at,
            COALESCE(p.name, 'Produk Custom Gmail') as product_name,
-           COALESCE(p.usage_rules, '-') as usage_rules,
+           COALESCE(pv.usage_rules, p.usage_rules, '-') as usage_rules,
+           pv.tutorial_text as tutorial_text,
            COALESCE(pv.name, 'Paket Custom Gmail') as variant_name,
            COALESCE(pv.duration, '-') as duration,
            COALESCE(pv.is_custom_gmail, 1) as is_custom_gmail
@@ -100,37 +96,35 @@ export class AdminInvoiceRepository extends BaseRepository {
     return results || []
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: UPDATE INVOICE STATUS MANUAL OLEH ADMIN (CRUD INVOICE)]
-  // Jika diubah menjadi 'lunas', otomatis menandai stok 'sold' & kirim email
-  // Jika diubah menjadi 'expired'/'dibatalkan'/'failed', otomatis lepas stok
-  // --------------------------------------------------------------------------
-  public async updateInvoiceStatus(invoiceId: string, newStatus: TransactionStatus): Promise<void> {
+  public async updateInvoiceStatus(transactionId: string, newStatus: TransactionStatus): Promise<void> {
     const tx = await this.db
       .prepare(
         `SELECT 
-           t.*, p.name as product_name, p.usage_rules,
-           pv.name as variant_name, pv.duration, pv.is_custom_gmail
+           t.*,
+           COALESCE(p.name, 'Aplikasi Premium') as product_name,
+           COALESCE(pv.usage_rules, p.usage_rules, '-') as usage_rules,
+           pv.tutorial_text as tutorial_text,
+           COALESCE(pv.name, 'Paket Premium') as variant_name,
+           COALESCE(pv.duration, '-') as duration,
+           COALESCE(pv.is_custom_gmail, 0) as is_custom_gmail
          FROM transactions t
-         JOIN product_variants pv ON pv.id = t.variant_id
-         JOIN products p ON p.id = pv.product_id
+         LEFT JOIN product_variants pv ON pv.id = t.variant_id
+         LEFT JOIN products p ON p.id = pv.product_id
          WHERE t.id = ?1 LIMIT 1`
       )
-      .bind(invoiceId)
+      .bind(transactionId)
       .first<AdminTransactionRow & { delivered_account_data: string | null }>()
 
     if (!tx) {
       throw createError({ statusCode: 404, statusMessage: 'Invoice tidak ditemukan.' })
     }
 
-    // KASUS A: Diubah menjadi LUNAS
     if (newStatus === 'lunas' && tx.status !== 'lunas') {
       await this.settleTransactionAndDeliver(tx)
       return
     }
 
-    // KASUS B: Diubah menjadi EXPIRED / DIBATALKAN / FAILED (Lepaskan stok yang di-lock)
-    if (['expired', 'dibatalkan', 'failed'].includes(newStatus) && tx.account_stock_id) {
+    if ((newStatus === 'dibatalkan' || newStatus === 'expired' || newStatus === 'failed') && tx.account_stock_id) {
       await this.db
         .prepare(
           `UPDATE account_stocks
@@ -143,145 +137,131 @@ export class AdminInvoiceRepository extends BaseRepository {
 
     await this.db
       .prepare(`UPDATE transactions SET status = ?1, updated_at = datetime('now') WHERE id = ?2`)
-      .bind(newStatus, invoiceId)
+      .bind(newStatus, transactionId)
       .run()
 
-    await this.writeSystemLog('warn', 'INVOICE_CRUD', `Status invoice ${invoiceId} diubah menjadi ${newStatus}`, {
-      invoiceId,
-      newStatus
-    })
+    await this.writeSystemLog('warn', 'INVOICE_STATUS', `Admin ubah status ${transactionId} -> ${newStatus}`)
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: SETTLE TRANSACTION & AUTO DELIVER EMAIL (UNTUK PAKET BIASA)]
-  // --------------------------------------------------------------------------
   public async settleTransactionAndDeliver(
-    tx: AdminTransactionRow & { delivered_account_data: string | null }
+    tx: AdminTransactionRow & { delivered_account_data?: string | null }
   ): Promise<void> {
     const config = useRuntimeConfig(this.event)
-
-    // 1. Jika Paket Custom Gmail: Ubah status bayar jadi lunas & masuk antrean waiting_admin
-    if (tx.is_custom_gmail === 1) {
-      await this.db
-        .prepare(
-          `UPDATE transactions
-           SET status = 'lunas',
-               custom_gmail_status = 'waiting_admin',
-               paid_at = datetime('now'),
-               updated_at = datetime('now')
-           WHERE id = ?1`
-        )
-        .bind(tx.id)
-        .run()
-
-      await this.writeSystemLog('info', 'INVOICE_SETTLE', `Invoice Custom Gmail ${tx.id} LUNAS (Menunggu Konfirmasi Admin)`)
-      return
-    }
-
-    // 2. Jika Paket Stok Biasa (.txt): Ambil stok yang sudah di-reserve atau cari stok available
-    let stockRow: { id: number, encrypted_account_data: string } | null = null
-
-    if (tx.account_stock_id) {
-      stockRow = await this.db
-        .prepare('SELECT id, encrypted_account_data FROM account_stocks WHERE id = ?1 LIMIT 1')
-        .bind(tx.account_stock_id)
-        .first<{ id: number, encrypted_account_data: string }>()
-    }
-
-    if (!stockRow) {
-      stockRow = await this.db
-        .prepare(
-          `UPDATE account_stocks
-           SET status = 'sold', sold_at = datetime('now')
-           WHERE id = (
-             SELECT id FROM account_stocks
-             WHERE variant_id = ?1 AND status = 'available'
-             ORDER BY id ASC LIMIT 1
-           )
-           RETURNING id, encrypted_account_data`
-        )
-        .bind(tx.variant_id)
-        .first<{ id: number, encrypted_account_data: string }>()
-    } else {
-      await this.db
-        .prepare(`UPDATE account_stocks SET status = 'sold', sold_at = datetime('now') WHERE id = ?1`)
-        .bind(stockRow.id)
-        .run()
-    }
-
-    if (!stockRow) {
-      throw createError({
-        statusCode: 409,
-        statusMessage: 'Stok akun untuk paket ini sedang habis. Tambahkan stok .txt terlebih dahulu.'
-      })
-    }
-
-    // Update transaksi menjadi lunas & simpan referensi stok
-    await this.db
-      .prepare(
-        `UPDATE transactions
-         SET status = 'lunas',
-             account_stock_id = ?1,
-             delivered_account_data = ?2,
-             paid_at = datetime('now'),
-             email_sent_at = datetime('now'),
-             updated_at = datetime('now')
-         WHERE id = ?3`
-      )
-      .bind(stockRow.id, stockRow.encrypted_account_data, tx.id)
-      .run()
-
-    // Dekripsi akun di memori untuk dikirim ke email pembeli
     const cryptoService = new CryptoService(config.encryptionKey)
-    const decryptedRaw = await cryptoService.decryptAccountData(stockRow.encrypted_account_data)
-    const parsedAccount = new StockParserService().parseSingleDecryptedString(decryptedRaw)
-
     const emailService = new EmailService({
       apiKey: config.mailApiKey,
       fromAddress: config.mailFrom,
       mainDomain: config.public.mainDomain
     })
 
-    await emailService.sendInvoiceEmail({
-      toEmail: tx.customer_email,
-      invoiceId: tx.id,
-      invoiceToken: tx.invoice_token,
-      productName: tx.product_name,
-      variantName: tx.variant_name,
-      duration: tx.duration,
-      totalAmount: tx.total_amount,
-      isCustomGmail: false,
-      accountEmail: parsedAccount.email,
-      accountPassword: parsedAccount.password,
-      accountExtraLink: parsedAccount.extraInfoLink,
-      usageRules: tx.usage_rules
-    })
+    let encryptedStockToSnapshot: string | null = tx.delivered_account_data || null
+    let parsedAccount: { email: string, password: string, extraInfoLink: string | null } | null = null
 
-    await this.writeSystemLog('info', 'INVOICE_SETTLE', `Invoice ${tx.id} LUNAS & akun terkirim ke ${tx.customer_email}`)
+    if (tx.is_custom_gmail === 0) {
+      let stockId = tx.account_stock_id
+
+      if (!stockId) {
+        const fallbackStock = await this.db
+          .prepare(
+            `SELECT id, encrypted_account_data FROM account_stocks
+             WHERE variant_id = ?1 AND status = 'available'
+             ORDER BY id ASC LIMIT 1`
+          )
+          .bind(tx.variant_id)
+          .first<{ id: number, encrypted_account_data: string }>()
+
+        if (!fallbackStock) {
+          throw createError({
+            statusCode: 409,
+            statusMessage: 'Stok akun untuk varian ini habis, tidak dapat menyelesaikan pengiriman otomatis.'
+          })
+        }
+        stockId = fallbackStock.id
+        encryptedStockToSnapshot = fallbackStock.encrypted_account_data
+      } else {
+        const reservedStock = await this.db
+          .prepare('SELECT encrypted_account_data FROM account_stocks WHERE id = ?1 LIMIT 1')
+          .bind(stockId)
+          .first<{ encrypted_account_data: string }>()
+
+        encryptedStockToSnapshot = reservedStock?.encrypted_account_data || null
+      }
+
+      await this.db
+        .prepare(`UPDATE account_stocks SET status = 'sold', reserved_until = NULL WHERE id = ?1`)
+        .bind(stockId)
+        .run()
+
+      if (encryptedStockToSnapshot) {
+        const decryptedPlain = await cryptoService.decryptAccountData(encryptedStockToSnapshot)
+        const parser = new StockParserService()
+        parsedAccount = parser.parseSingleDecryptedString(decryptedPlain)
+      }
+    }
+
+    await this.db
+      .prepare(
+        `UPDATE transactions
+         SET status = 'lunas',
+             delivered_account_data = COALESCE(?1, delivered_account_data),
+             paid_at = COALESCE(paid_at, datetime('now')),
+             updated_at = datetime('now')
+         WHERE id = ?2`
+      )
+      .bind(encryptedStockToSnapshot, tx.id)
+      .run()
+
+    if (tx.is_custom_gmail === 0 && parsedAccount) {
+      try {
+        await emailService.sendInvoiceEmail({
+          toEmail: tx.customer_email,
+          invoiceId: tx.id,
+          invoiceToken: tx.invoice_token,
+          productName: tx.product_name,
+          variantName: tx.variant_name,
+          duration: tx.duration,
+          totalAmount: tx.total_amount,
+          isCustomGmail: false,
+          accountEmail: parsedAccount.email,
+          accountPassword: parsedAccount.password,
+          accountExtraLink: parsedAccount.extraInfoLink,
+          usageRules: tx.usage_rules,
+          tutorialText: tx.tutorial_text
+        })
+
+        await this.db
+          .prepare(`UPDATE transactions SET email_sent_at = datetime('now') WHERE id = ?1`)
+          .bind(tx.id)
+          .run()
+      } catch (err) {
+        await this.writeSystemLog('error', 'EMAIL_SEND', `Gagal kirim email otomatis untuk ${tx.id}`, {
+          error: err instanceof Error ? err.message : 'Unknown error'
+        })
+      }
+    }
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: KONFIRMASI SELESAI CUSTOM GMAIL OLEH ADMIN]
-  // Saat Admin klik Konfirmasi, status menjadi 'completed' & kirim email Invoice
-  // --------------------------------------------------------------------------
-  public async confirmCustomGmailOrder(invoiceId: string): Promise<void> {
-    const config = useRuntimeConfig(this.event)
-
+  public async confirmCustomGmailCompleted(transactionId: string): Promise<void> {
     const tx = await this.db
       .prepare(
         `SELECT 
-           t.*, p.name as product_name, p.usage_rules,
-           pv.name as variant_name, pv.duration, pv.is_custom_gmail
+           t.*,
+           COALESCE(p.name, 'Aplikasi Premium') as product_name,
+           COALESCE(pv.usage_rules, p.usage_rules, '-') as usage_rules,
+           pv.tutorial_text as tutorial_text,
+           COALESCE(pv.name, 'Paket Custom Gmail') as variant_name,
+           COALESCE(pv.duration, '-') as duration,
+           COALESCE(pv.is_custom_gmail, 1) as is_custom_gmail
          FROM transactions t
-         JOIN product_variants pv ON pv.id = t.variant_id
-         JOIN products p ON p.id = pv.product_id
-         WHERE t.id = ?1 AND pv.is_custom_gmail = 1 LIMIT 1`
+         LEFT JOIN product_variants pv ON pv.id = t.variant_id
+         LEFT JOIN products p ON p.id = pv.product_id
+         WHERE t.id = ?1 LIMIT 1`
       )
-      .bind(invoiceId)
+      .bind(transactionId)
       .first<AdminTransactionRow>()
 
     if (!tx) {
-      throw createError({ statusCode: 404, statusMessage: 'Pesanan Custom Gmail tidak ditemukan.' })
+      throw createError({ statusCode: 404, statusMessage: 'Transaksi tidak ditemukan.' })
     }
 
     await this.db
@@ -292,9 +272,10 @@ export class AdminInvoiceRepository extends BaseRepository {
              updated_at = datetime('now')
          WHERE id = ?1`
       )
-      .bind(invoiceId)
+      .bind(transactionId)
       .run()
 
+    const config = useRuntimeConfig(this.event)
     const emailService = new EmailService({
       apiKey: config.mailApiKey,
       fromAddress: config.mailFrom,
@@ -310,15 +291,91 @@ export class AdminInvoiceRepository extends BaseRepository {
       duration: tx.duration,
       totalAmount: tx.total_amount,
       isCustomGmail: true,
-      customGmailTarget: tx.custom_gmail_account || tx.customer_email,
-      usageRules: tx.usage_rules
+      customGmailTarget: tx.custom_gmail_account,
+      usageRules: tx.usage_rules,
+      tutorialText: tx.tutorial_text
     })
 
-    await this.writeSystemLog(
-      'info',
-      'CUSTOM_GMAIL_CONFIRM',
-      `Admin mengonfirmasi aktivasi Custom Gmail untuk Invoice ${tx.id} (${tx.custom_gmail_account})`,
-      { invoiceId: tx.id, customerEmail: tx.customer_email }
-    )
+    await this.writeSystemLog('info', 'CUSTOM_GMAIL_CONFIRM', `Admin konfirmasi selesai & kirim email: ${tx.id}`)
+  }
+
+  public async resendInvoiceEmailById(transactionId: string): Promise<void> {
+    const tx = await this.db
+      .prepare(
+        `SELECT 
+           t.*,
+           COALESCE(p.name, 'Aplikasi Premium') as product_name,
+           COALESCE(pv.usage_rules, p.usage_rules, '-') as usage_rules,
+           pv.tutorial_text as tutorial_text,
+           COALESCE(pv.name, 'Paket Premium') as variant_name,
+           COALESCE(pv.duration, '-') as duration,
+           COALESCE(pv.is_custom_gmail, 0) as is_custom_gmail
+         FROM transactions t
+         LEFT JOIN product_variants pv ON pv.id = t.variant_id
+         LEFT JOIN products p ON p.id = pv.product_id
+         WHERE t.id = ?1 LIMIT 1`
+      )
+      .bind(transactionId)
+      .first<AdminTransactionRow & { delivered_account_data: string | null }>()
+
+    if (!tx || tx.status !== 'lunas') {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Hanya invoice berstatus LUNAS yang dapat dikirimkan ulang emailnya.'
+      })
+    }
+
+    const config = useRuntimeConfig(this.event)
+    const emailService = new EmailService({
+      apiKey: config.mailApiKey,
+      fromAddress: config.mailFrom,
+      mainDomain: config.public.mainDomain
+    })
+
+    if (tx.is_custom_gmail === 1) {
+      await emailService.sendInvoiceEmail({
+        toEmail: tx.customer_email,
+        invoiceId: tx.id,
+        invoiceToken: tx.invoice_token,
+        productName: tx.product_name,
+        variantName: tx.variant_name,
+        duration: tx.duration,
+        totalAmount: tx.total_amount,
+        isCustomGmail: true,
+        customGmailTarget: tx.custom_gmail_account,
+        usageRules: tx.usage_rules,
+        tutorialText: tx.tutorial_text
+      })
+    } else if (tx.delivered_account_data) {
+      const cryptoService = new CryptoService(config.encryptionKey)
+      const plain = await cryptoService.decryptAccountData(tx.delivered_account_data)
+      const parsed = new StockParserService().parseSingleDecryptedString(plain)
+
+      await emailService.sendInvoiceEmail({
+        toEmail: tx.customer_email,
+        invoiceId: tx.id,
+        invoiceToken: tx.invoice_token,
+        productName: tx.product_name,
+        variantName: tx.variant_name,
+        duration: tx.duration,
+        totalAmount: tx.total_amount,
+        isCustomGmail: false,
+        accountEmail: parsed.email,
+        accountPassword: parsed.password,
+        accountExtraLink: parsed.extraInfoLink,
+        usageRules: tx.usage_rules,
+        tutorialText: tx.tutorial_text
+      })
+    }
+
+    await this.db
+      .prepare(`UPDATE transactions SET email_sent_at = datetime('now') WHERE id = ?1`)
+      .bind(transactionId)
+      .run()
+  }
+
+  public async deleteInvoice(transactionId: string): Promise<void> {
+    await this.db.prepare('DELETE FROM transactions WHERE id = ?1').bind(transactionId).run()
+    await this.writeSystemLog('warn', 'INVOICE_DELETE', `Admin hapus invoice: ${transactionId}`)
   }
 }
