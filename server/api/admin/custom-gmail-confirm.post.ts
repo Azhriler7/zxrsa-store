@@ -1,28 +1,32 @@
 // ============================================================================
 // FILE: server/api/admin/custom-gmail-confirm.post.ts
 // DESKRIPSI: Endpoint POST Konfirmasi Pesanan Custom Gmail Selesai & Kirim Email
+//            (Mendukung field 'id' maupun 'transaction_id').
 // ============================================================================
 
 import { z } from 'zod'
 import { AdminInvoiceRepository } from '../../services/AdminInvoiceRepository'
 
 const confirmSchema = z.object({
-  transaction_id: z.string().min(3, 'ID Transaksi tidak valid')
+  id: z.string().optional(),
+  transaction_id: z.string().optional()
 })
 
 export default defineEventHandler(async (event) => {
   await requireUserSession(event)
   const body = await readValidatedBody(event, r => confirmSchema.safeParse(r))
 
-  if (!body.success) {
+  const targetTxId = (body.data?.transaction_id || body.data?.id || '').trim()
+
+  if (!body.success || targetTxId.length < 3) {
     throw createError({
       statusCode: 400,
-      statusMessage: body.error.issues[0]?.message || 'ID Transaksi tidak valid.'
+      statusMessage: 'ID Transaksi tidak valid.'
     })
   }
 
   const repo = new AdminInvoiceRepository(event)
-  const result = await repo.confirmCustomGmailCompleted(body.data.transaction_id)
+  const result = await repo.confirmCustomGmailCompleted(targetTxId)
 
   return {
     success: true,

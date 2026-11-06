@@ -1,24 +1,53 @@
 // ============================================================================
 // FILE: server/api/webhooks/qris.post.ts
-// DESKRIPSI: Endpoint Webhook Instan Mutasiku.co dengan Audit Logging &
-//            Grace Window Recovery (Standar Industri Payment Fail-Safe).
+// DESKRIPSI: Endpoint Webhook Resmi untuk Mutasiku.co (Mendukung Webhook Secret,
+//            API Key Secret, & HMAC Signature Verification).
 // ============================================================================
 
 import { StorefrontRepository } from '../../services/StorefrontRepository'
+
+async function verifyHmacSha256(payload: string, signatureHex: string, secret: string): Promise<boolean> {
+  try {
+    const encoder = new TextEncoder()
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    )
+    const sigBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(payload))
+    const computedHex = Array.from(new Uint8Array(sigBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+    return computedHex.toLowerCase() === signatureHex.toLowerCase()
+  } catch {
+    return false
+  }
+}
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   const rawBody = (await readRawBody(event, 'utf-8')) || '{}'
   const query = getQuery(event)
 
-  const secretKey = (config.webhookHmacSecret || '').trim()
+  const webhookSecret = String(config.webhookHmacSecret || '').trim()
+  const mutasikuApiKey = String(config.mutasikuApiKey || '').trim()
 
   const queryKey = String(query.key || query.token || query.secret || '').trim()
   const headerKey = (
     getHeader(event, 'x-webhook-key')
     || getHeader(event, 'x-api-key')
     || getHeader(event, 'x-callback-token')
+    || getHeader(event, 'x-mutasiku-token')
     || getHeader(event, 'authorization')?.replace(/^Bearer\s+/i, '')
+    || ''
+  ).trim()
+
+  const signatureHeader = (
+    getHeader(event, 'x-mutasiku-signature')
+    || getHeader(event, 'x-webhook-signature')
+    || getHeader(event, 'x-signature')
     || ''
   ).trim()
 
@@ -29,12 +58,29 @@ export default defineEventHandler(async (event) => {
     parsedPayload = { text: rawBody }
   }
 
-  const bodyKey = String(parsedPayload.api_key || parsedPayload.token || parsedPayload.secret || '').trim()
+  const bodyKey = String(
+    parsedPayload.api_key || parsedPayload.token || parsedPayload.secret || parsedPayload.webhook_secret || ''
+  ).trim()
 
-  if (secretKey && queryKey !== secretKey && headerKey !== secretKey && bodyKey !== secretKey) {
+  // Verifikasi kecocokan dengan Webhook Secret ATAU API Key Mutasiku
+  const validSecrets = [webhookSecret, mutasikuApiKey].filter(Boolean)
+  let isAuthorized = validSecrets.length === 0
+
+  for (const sec of validSecrets) {
+    if (queryKey === sec || headerKey === sec || bodyKey === sec) {
+      isAuthorized = true
+      break
+    }
+    if (signatureHeader && (await verifyHmacSha256(rawBody, signatureHeader, sec))) {
+      isAuthorized = true
+      break
+    }
+  }
+
+  if (!isAuthorized) {
     throw createError({
       statusCode: 401,
-      statusMessage: 'Unauthorized Mutasiku Webhook Key.'
+      statusMessage: 'Unauthorized Mutasiku Webhook Secret.'
     })
   }
 
@@ -82,10 +128,10 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!detectedAmount || detectedAmount <= 0) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Nominal pembayaran tidak ditemukan dalam payload Mutasiku.'
-    })
+    return {
+      success: false,
+      message: 'Ping/Event diterima, namun tidak ada nominal transaksi yang perlu diproses.'
+    }
   }
 
   const externalRef = String(
