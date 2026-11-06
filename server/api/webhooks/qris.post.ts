@@ -1,26 +1,29 @@
 // ============================================================================
 // FILE: server/api/webhooks/qris.post.ts
-// DESKRIPSI: Endpoint Webhook Resmi untuk Mutasiku.co (Mendukung Webhook Secret,
-//            API Key Secret, & HMAC Signature Verification).
+// DESKRIPSI: Endpoint Webhook Resmi Mutasiku (Mendukung Verifikasi Signature
+//            HMAC-SHA256 & Event "New Mutations" / "Payment Completed").
 // ============================================================================
 
 import { StorefrontRepository } from '../../services/StorefrontRepository'
 
-async function verifyHmacSha256(payload: string, signatureHex: string, secret: string): Promise<boolean> {
+async function verifyHmacSha256(payload: string, signatureHeaderValue: string, secret: string): Promise<boolean> {
   try {
+    // Bersihkan awalan 'sha256=' jika Mutasiku menyertakannya di header signature
+    const cleanSignatureHex = signatureHeaderValue.replace(/^sha256=/i, '').trim()
+
     const encoder = new TextEncoder()
     const key = await crypto.subtle.importKey(
       'raw',
-      encoder.encode(secret),
+      encoder.encode(secret) as BufferSource,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']
     )
-    const sigBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(payload))
+    const sigBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(payload) as BufferSource)
     const computedHex = Array.from(new Uint8Array(sigBuffer))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('')
-    return computedHex.toLowerCase() === signatureHex.toLowerCase()
+    return computedHex.toLowerCase() === cleanSignatureHex.toLowerCase()
   } catch {
     return false
   }
@@ -44,10 +47,12 @@ export default defineEventHandler(async (event) => {
     || ''
   ).trim()
 
+  // Tangkap semua kemungkinan nama header signature dari Mutasiku
   const signatureHeader = (
     getHeader(event, 'x-mutasiku-signature')
     || getHeader(event, 'x-webhook-signature')
     || getHeader(event, 'x-signature')
+    || getHeader(event, 'signature')
     || ''
   ).trim()
 
@@ -59,10 +64,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const bodyKey = String(
-    parsedPayload.api_key || parsedPayload.token || parsedPayload.secret || parsedPayload.webhook_secret || ''
+    parsedPayload['api_key'] || parsedPayload['token'] || parsedPayload['secret'] || parsedPayload['webhook_secret'] || ''
   ).trim()
 
-  // Verifikasi kecocokan dengan Webhook Secret ATAU API Key Mutasiku
+  // Verifikasi Signature HMAC-SHA256 atau Secret Token
   const validSecrets = [webhookSecret, mutasikuApiKey].filter(Boolean)
   let isAuthorized = validSecrets.length === 0
 
@@ -80,70 +85,83 @@ export default defineEventHandler(async (event) => {
   if (!isAuthorized) {
     throw createError({
       statusCode: 401,
-      statusMessage: 'Unauthorized Mutasiku Webhook Secret.'
+      statusMessage: 'Unauthorized Mutasiku Webhook Signature.'
     })
   }
 
-  let detectedAmount = 0
+  // --------------------------------------------------------------------------
+  // [SECTION: EKSTRAKSI NOMINAL DARI EVENT "New Mutations" / "Payment Completed"]
+  // --------------------------------------------------------------------------
+  const candidateAmounts: number[] = []
 
-  if (Array.isArray(parsedPayload.data) && parsedPayload.data.length > 0) {
-    const firstMutation = parsedPayload.data[0] as Record<string, unknown>
-    detectedAmount = Number(
-      firstMutation.amount || firstMutation.kredit || firstMutation.nominal || firstMutation.total || 0
-    )
-  } else if (parsedPayload.data && typeof parsedPayload.data === 'object') {
-    const dataObj = parsedPayload.data as Record<string, unknown>
-    detectedAmount = Number(
-      dataObj.amount || dataObj.kredit || dataObj.nominal || dataObj.total || 0
-    )
-  }
+  // 1. Jika payload memiliki array 'mutations' atau 'data' (Event: New Mutations)
+  const listSource = Array.isArray(parsedPayload['mutations'])
+    ? (parsedPayload['mutations'] as Record<string, unknown>[])
+    : Array.isArray(parsedPayload['data'])
+      ? (parsedPayload['data'] as Record<string, unknown>[])
+      : []
 
-  if (!detectedAmount || detectedAmount <= 0) {
-    const rawNum = String(
-      parsedPayload.amount
-      || parsedPayload.kredit
-      || parsedPayload.credit
-      || parsedPayload.nominal
-      || parsedPayload.total
-      || '0'
-    ).replace(/[^0-9]/g, '')
-    detectedAmount = Number(rawNum)
-  }
-
-  if (!detectedAmount || detectedAmount <= 0) {
-    const combinedText = [
-      parsedPayload.text,
-      parsedPayload.message,
-      parsedPayload.description,
-      parsedPayload.keterangan,
-      rawBody
-    ]
-      .filter(Boolean)
-      .join(' ')
-
-    const rpMatch = combinedText.match(/(?:Rp|IDR)\.?\s*([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]{4,9})/i)
-    if (rpMatch && rpMatch[1]) {
-      detectedAmount = Number(rpMatch[1].replace(/[.,]/g, ''))
+  for (const item of listSource) {
+    if (item && typeof item === 'object') {
+      const amt = Number(item['amount'] || item['kredit'] || item['credit'] || item['nominal'] || item['total'] || 0)
+      if (amt > 0) candidateAmounts.push(amt)
     }
   }
 
-  if (!detectedAmount || detectedAmount <= 0) {
+  // 2. Jika payload memiliki objek tunggal 'data' atau 'mutation' atau 'payment'
+  const singleObj = (parsedPayload['data'] || parsedPayload['mutation'] || parsedPayload['payment']) as Record<string, unknown> | undefined
+  if (singleObj && typeof singleObj === 'object' && !Array.isArray(singleObj)) {
+    const amt = Number(
+      singleObj['amount'] || singleObj['kredit'] || singleObj['credit'] || singleObj['nominal'] || singleObj['total'] || 0
+    )
+    if (amt > 0) candidateAmounts.push(amt)
+  }
+
+  // 3. Jika nominal berada langsung di root JSON
+  if (candidateAmounts.length === 0) {
+    const rawNum = String(
+      parsedPayload['amount']
+      || parsedPayload['kredit']
+      || parsedPayload['credit']
+      || parsedPayload['nominal']
+      || parsedPayload['total']
+      || '0'
+    ).replace(/[^0-9]/g, '')
+    const amt = Number(rawNum)
+    if (amt > 0) candidateAmounts.push(amt)
+  }
+
+  if (candidateAmounts.length === 0) {
     return {
-      success: false,
-      message: 'Ping/Event diterima, namun tidak ada nominal transaksi yang perlu diproses.'
+      success: true,
+      message: 'Webhook diterima, namun tidak ada nominal transaksi yang perlu diproses.'
     }
   }
 
   const externalRef = String(
-    parsedPayload.id || parsedPayload.mutation_id || parsedPayload.trx_id || `MUTASIKU-${Date.now()}`
+    parsedPayload['id']
+    || parsedPayload['mutation_id']
+    || parsedPayload['trx_id']
+    || (singleObj && singleObj['id'])
+    || `MUTASIKU-${Date.now()}`
   )
 
   const repo = new StorefrontRepository(event)
-  const settledInvoiceId = await repo.processQrisWebhookMutation(detectedAmount, externalRef)
+  const settledInvoices: string[] = []
+
+  // Proses setiap mutasi yang masuk di dalam batch New Mutations
+  for (const amount of candidateAmounts) {
+    try {
+      const settledId = await repo.processQrisWebhookMutation(amount, externalRef)
+      settledInvoices.push(settledId)
+    } catch {
+      // Lanjut cek item mutasi berikutnya jika ada lebih dari 1 mutasi dalam 1 webhook
+    }
+  }
 
   return {
     success: true,
-    settledInvoiceId,
-    detectedAmount
+    settledInvoices,
+    processedAmounts: candidateAmounts
   }
 })

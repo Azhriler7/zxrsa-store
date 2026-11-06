@@ -1,27 +1,34 @@
 // ============================================================================
 // FILE: server/api/admin/custom-gmail-confirm.post.ts
 // DESKRIPSI: Endpoint POST Konfirmasi Pesanan Custom Gmail Selesai & Kirim Email
-//            (Mendukung field 'id' maupun 'transaction_id').
 // ============================================================================
 
-import { z } from 'zod'
 import { AdminInvoiceRepository } from '../../services/AdminInvoiceRepository'
-
-const confirmSchema = z.object({
-  id: z.string().optional(),
-  transaction_id: z.string().optional()
-})
 
 export default defineEventHandler(async (event) => {
   await requireUserSession(event)
-  const body = await readValidatedBody(event, r => confirmSchema.safeParse(r))
 
-  const targetTxId = (body.data?.transaction_id || body.data?.id || '').trim()
+  const rawBody: Record<string, unknown> = (
+    await readBody<Record<string, unknown>>(event).catch((): Record<string, unknown> => ({}))
+  ) || {}
 
-  if (!body.success || targetTxId.length < 3) {
+  const query = getQuery(event)
+
+  const targetTxId = String(
+    rawBody['transaction_id']
+    || rawBody['id']
+    || rawBody['transactionId']
+    || rawBody['invoice_id']
+    || rawBody['invoiceId']
+    || query.id
+    || query.transaction_id
+    || ''
+  ).trim()
+
+  if (!targetTxId) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'ID Transaksi tidak valid.'
+      statusMessage: 'ID Transaksi tidak ditemukan dalam request.'
     })
   }
 
