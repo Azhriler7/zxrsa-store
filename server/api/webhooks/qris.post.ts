@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: server/api/webhooks/qris.post.ts
-// DESKRIPSI: Endpoint Webhook Instan untuk Mutasiku.co.id / Mutasi QRIS
-//            (Bebas Error ESLint & Mendukung Callback Instan 1 Detik).
+// DESKRIPSI: Endpoint Webhook Instan Mutasiku.co dengan Audit Logging &
+//            Grace Window Recovery (Standar Industri Payment Fail-Safe).
 // ============================================================================
 
 import { StorefrontRepository } from '../../services/StorefrontRepository'
@@ -11,10 +11,8 @@ export default defineEventHandler(async (event) => {
   const rawBody = (await readRawBody(event, 'utf-8')) || '{}'
   const query = getQuery(event)
 
-  // Ambil secret dari NUXT_WEBHOOK_HMAC_SECRET di .env / Cloudflare Secrets
   const secretKey = (config.webhookHmacSecret || '').trim()
 
-  // Mutasiku bisa mengirim token via Query (?key=...), Header (x-api-key / Authorization), atau di dalam Body JSON
   const queryKey = String(query.key || query.token || query.secret || '').trim()
   const headerKey = (
     getHeader(event, 'x-webhook-key')
@@ -24,7 +22,6 @@ export default defineEventHandler(async (event) => {
     || ''
   ).trim()
 
-  // Deklarasi tanpa nilai awal '= {}' agar 100% lulus ESLint no-useless-assignment
   let parsedPayload: Record<string, unknown>
   try {
     parsedPayload = JSON.parse(rawBody) as Record<string, unknown>
@@ -34,7 +31,6 @@ export default defineEventHandler(async (event) => {
 
   const bodyKey = String(parsedPayload.api_key || parsedPayload.token || parsedPayload.secret || '').trim()
 
-  // Validasi Keamanan Webhook Mutasiku
   if (secretKey && queryKey !== secretKey && headerKey !== secretKey && bodyKey !== secretKey) {
     throw createError({
       statusCode: 401,
@@ -42,13 +38,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: EKSTRAKSI NOMINAL MUTASIKU (MENDUKUNG FORMAT OBJECT, ARRAY, & TEKS)]
-  // Mutasiku mengirimkan field 'amount' / 'kredit' / 'nominal' atau array 'data'
-  // --------------------------------------------------------------------------
   let detectedAmount = 0
 
-  // Cek jika Mutasiku mengirim dalam bentuk array mutasi: { data: [{ amount: 15123, type: 'CR' }] }
   if (Array.isArray(parsedPayload.data) && parsedPayload.data.length > 0) {
     const firstMutation = parsedPayload.data[0] as Record<string, unknown>
     detectedAmount = Number(
@@ -61,7 +52,6 @@ export default defineEventHandler(async (event) => {
     )
   }
 
-  // Jika dikirim langsung di root JSON: { amount: 15123, kredit: "15123" }
   if (!detectedAmount || detectedAmount <= 0) {
     const rawNum = String(
       parsedPayload.amount
@@ -74,7 +64,6 @@ export default defineEventHandler(async (event) => {
     detectedAmount = Number(rawNum)
   }
 
-  // Fallback ekstraksi dari teks notifikasi mentah jika dikirim dari forwarder notifikasi Mutasiku
   if (!detectedAmount || detectedAmount <= 0) {
     const combinedText = [
       parsedPayload.text,

@@ -6,6 +6,22 @@
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
 
+const config = useRuntimeConfig()
+
+const waConfirmUrl = computed(() => {
+  const inv = data.value?.invoice
+  if (!inv) return `https://wa.me/${config.public.whatsappNumber}`
+  const text = encodeURIComponent(
+    `Halo Admin ZXRSA Store, saya sudah melakukan pembayaran QRIS namun status masih ${inv.status.toUpperCase()}.\n\n`
+    + `• No. Invoice: ${inv.id}\n`
+    + `• Paket: ${inv.product_name} (${inv.variant_name})\n`
+    + `• Total Tagihan: Rp ${inv.total_amount}\n`
+    + `• Email: ${inv.customer_email}\n\n`
+    + `Mohon dibantu verifikasi. Terima kasih!`
+  )
+  return `https://wa.me/${config.public.whatsappNumber}?text=${text}`
+})
+
 const route = useRoute()
 const token = computed(() => String(route.params.token || '').trim())
 
@@ -189,6 +205,33 @@ function formatRupiah(val: number) {
             </UCard>
           </template>
         </ClientOnly>
+
+        <!-- KOTAK FAIL-SAFE BANTUAN PEMBAYARAN (STANDAR INDUSTRI JIKA WEBHOOK TERLAMBAT) -->
+        <UCard
+          v-if="data.invoice.status === 'pending' || data.invoice.status === 'expired'"
+          class="bg-elevated/50"
+        >
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+            <div class="space-y-0.5">
+              <h3 class="text-xs font-bold text-highlighted">
+                Sudah Transfer Sesuai Nominal Tapi Status Belum Berubah?
+              </h3>
+              <p class="text-[11px] text-muted">
+                Klik tombol Cek Status di atas, atau kirim bukti bayar ke WhatsApp Admin untuk aktivasi instan.
+              </p>
+            </div>
+            <UButton
+              :to="waConfirmUrl"
+              target="_blank"
+              color="success"
+              variant="subtle"
+              size="xs"
+              icon="i-lucide-message-circle-check"
+              label="Konfirmasi Bukti Bayar via WA"
+              class="shrink-0"
+            />
+          </div>
+        </UCard>
 
         <InvoiceCredentialDeliverCard
           v-else-if="data.invoice.status === 'lunas'"

@@ -241,7 +241,10 @@ export class AdminInvoiceRepository extends BaseRepository {
     }
   }
 
-  public async confirmCustomGmailCompleted(transactionId: string): Promise<void> {
+  // --------------------------------------------------------------------------
+  // [SECTION: CONFIRM CUSTOM GMAIL QUEUE (DEFENSIVE TRY/CATCH ANTI-500)]
+  // --------------------------------------------------------------------------
+  public async confirmCustomGmailCompleted(transactionId: string): Promise<{ emailSent: boolean, emailError: string | null }> {
     const tx = await this.db
       .prepare(
         `SELECT 
@@ -264,17 +267,18 @@ export class AdminInvoiceRepository extends BaseRepository {
       throw createError({ statusCode: 404, statusMessage: 'Transaksi tidak ditemukan.' })
     }
 
+    // 1. Update status di database terlebih dahulu agar 100% selalu berhasil
     await this.db
       .prepare(
         `UPDATE transactions
          SET custom_gmail_status = 'completed',
-             email_sent_at = datetime('now'),
              updated_at = datetime('now')
          WHERE id = ?1`
       )
       .bind(transactionId)
       .run()
 
+    // 2. Kirim email ke pembeli dengan pelindung try/catch agar tidak pernah melempar Server Error 500
     const config = useRuntimeConfig(this.event)
     const emailService = new EmailService({
       apiKey: config.mailApiKey,
@@ -282,23 +286,49 @@ export class AdminInvoiceRepository extends BaseRepository {
       mainDomain: config.public.mainDomain
     })
 
-    await emailService.sendInvoiceEmail({
-      toEmail: tx.customer_email,
-      invoiceId: tx.id,
-      invoiceToken: tx.invoice_token,
-      productName: tx.product_name,
-      variantName: tx.variant_name,
-      duration: tx.duration,
-      totalAmount: tx.total_amount,
-      isCustomGmail: true,
-      customGmailTarget: tx.custom_gmail_account,
-      usageRules: tx.usage_rules,
-      tutorialText: tx.tutorial_text
-    })
+    let emailSent = false
+    let emailError: string | null = null
 
-    await this.writeSystemLog('info', 'CUSTOM_GMAIL_CONFIRM', `Admin konfirmasi selesai & kirim email: ${tx.id}`)
+    try {
+      await emailService.sendInvoiceEmail({
+        toEmail: tx.customer_email,
+        invoiceId: tx.id,
+        invoiceToken: tx.invoice_token,
+        productName: tx.product_name,
+        variantName: tx.variant_name,
+        duration: tx.duration,
+        totalAmount: Number(tx.total_amount || 0),
+        isCustomGmail: true,
+        customGmailTarget: tx.custom_gmail_account,
+        usageRules: tx.usage_rules || '-',
+        tutorialText: tx.tutorial_text || null
+      })
+
+      emailSent = true
+      await this.db
+        .prepare(`UPDATE transactions SET email_sent_at = datetime('now') WHERE id = ?1`)
+        .bind(transactionId)
+        .run()
+
+      await this.writeSystemLog('info', 'CUSTOM_GMAIL_CONFIRM', `Admin konfirmasi selesai & email terkirim: ${tx.id}`)
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : 'Gagal mengirim email via Resend'
+      await this.writeSystemLog('error', 'CUSTOM_GMAIL_EMAIL_ERROR', `Pesanan ${tx.id} selesai dikonfirmasi, namun email gagal terkirim`, {
+        error: emailError,
+        toEmail: tx.customer_email
+      })
+    }
+
+    return { emailSent, emailError }
   }
 
+  public async confirmCustomGmailOrder(transactionId: string) {
+    return await this.confirmCustomGmailCompleted(transactionId)
+  }
+
+  // --------------------------------------------------------------------------
+  // [SECTION: RESEND INVOICE EMAIL MANUALLY]
+  // --------------------------------------------------------------------------
   public async resendInvoiceEmailById(transactionId: string): Promise<void> {
     const tx = await this.db
       .prepare(
@@ -332,46 +362,60 @@ export class AdminInvoiceRepository extends BaseRepository {
       mainDomain: config.public.mainDomain
     })
 
-    if (tx.is_custom_gmail === 1) {
-      await emailService.sendInvoiceEmail({
-        toEmail: tx.customer_email,
-        invoiceId: tx.id,
-        invoiceToken: tx.invoice_token,
-        productName: tx.product_name,
-        variantName: tx.variant_name,
-        duration: tx.duration,
-        totalAmount: tx.total_amount,
-        isCustomGmail: true,
-        customGmailTarget: tx.custom_gmail_account,
-        usageRules: tx.usage_rules,
-        tutorialText: tx.tutorial_text
-      })
-    } else if (tx.delivered_account_data) {
-      const cryptoService = new CryptoService(config.encryptionKey)
-      const plain = await cryptoService.decryptAccountData(tx.delivered_account_data)
-      const parsed = new StockParserService().parseSingleDecryptedString(plain)
+    try {
+      if (Number(tx.is_custom_gmail) === 1) {
+        await emailService.sendInvoiceEmail({
+          toEmail: tx.customer_email,
+          invoiceId: tx.id,
+          invoiceToken: tx.invoice_token,
+          productName: tx.product_name,
+          variantName: tx.variant_name,
+          duration: tx.duration,
+          totalAmount: Number(tx.total_amount || 0),
+          isCustomGmail: true,
+          customGmailTarget: tx.custom_gmail_account,
+          usageRules: tx.usage_rules || '-',
+          tutorialText: tx.tutorial_text || null
+        })
+      } else if (tx.delivered_account_data) {
+        const cryptoService = new CryptoService(config.encryptionKey)
+        let plain: string
+        try {
+          plain = await cryptoService.decryptAccountData(tx.delivered_account_data)
+        } catch {
+          plain = tx.delivered_account_data
+        }
+        const parsed = new StockParserService().parseSingleDecryptedString(plain)
 
-      await emailService.sendInvoiceEmail({
-        toEmail: tx.customer_email,
-        invoiceId: tx.id,
-        invoiceToken: tx.invoice_token,
-        productName: tx.product_name,
-        variantName: tx.variant_name,
-        duration: tx.duration,
-        totalAmount: tx.total_amount,
-        isCustomGmail: false,
-        accountEmail: parsed.email,
-        accountPassword: parsed.password,
-        accountExtraLink: parsed.extraInfoLink,
-        usageRules: tx.usage_rules,
-        tutorialText: tx.tutorial_text
+        await emailService.sendInvoiceEmail({
+          toEmail: tx.customer_email,
+          invoiceId: tx.id,
+          invoiceToken: tx.invoice_token,
+          productName: tx.product_name,
+          variantName: tx.variant_name,
+          duration: tx.duration,
+          totalAmount: Number(tx.total_amount || 0),
+          isCustomGmail: false,
+          accountEmail: parsed.email,
+          accountPassword: parsed.password,
+          accountExtraLink: parsed.extraInfoLink,
+          usageRules: tx.usage_rules || '-',
+          tutorialText: tx.tutorial_text || null
+        })
+      }
+
+      await this.db
+        .prepare(`UPDATE transactions SET email_sent_at = datetime('now') WHERE id = ?1`)
+        .bind(transactionId)
+        .run()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal mengirim email via Resend.'
+      await this.writeSystemLog('error', 'EMAIL_RESEND_ERROR', `Gagal kirim ulang email ${transactionId}: ${msg}`)
+      throw createError({
+        statusCode: 400,
+        statusMessage: msg
       })
     }
-
-    await this.db
-      .prepare(`UPDATE transactions SET email_sent_at = datetime('now') WHERE id = ?1`)
-      .bind(transactionId)
-      .run()
   }
 
   public async deleteInvoice(transactionId: string): Promise<void> {

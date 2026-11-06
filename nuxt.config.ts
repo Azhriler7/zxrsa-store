@@ -17,13 +17,11 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   runtimeConfig: {
-    // Kunci Rahasia Session Cookie (Wajib ada agar tidak Server Error 500 di Cloudflare)
     appSecret: process.env.NUXT_APP_SECRET || '',
-
-    // Private Keys (Otomatis di-override oleh NUXT_* di Cloudflare Variables & Secrets)
     encryptionKey: process.env.NUXT_ENCRYPTION_KEY || '',
     qrisStaticString: process.env.NUXT_QRIS_STATIC_STRING || '',
     webhookHmacSecret: process.env.NUXT_WEBHOOK_HMAC_SECRET || '',
+    mutasikuApiKey: process.env.NUXT_MUTASIKU_API_KEY || '',
     mailApiKey: process.env.NUXT_MAIL_API_KEY || '',
     mailFrom: process.env.NUXT_MAIL_FROM || '',
 
