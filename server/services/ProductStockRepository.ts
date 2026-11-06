@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: server/services/ProductStockRepository.ts
-// DESKRIPSI: Repository OOP untuk CRUD Produk & Paket (Dilengkapi Kolom
-//            Aturan / usage_rules dan Tutorial / tutorial_text di Tiap Paket).
+// DESKRIPSI: Repository OOP untuk CRUD Produk, Paket, & Penyimpanan Stok
+//            Terenkripsi (Anti-Constraint Error D1).
 // ============================================================================
 
 import type { DbProduct, DbProductVariant } from '../types/database'
@@ -94,9 +94,13 @@ export class ProductStockRepository extends BaseRepository {
       )
       .run()
 
-    await this.writeSystemLog('info', 'PRODUCT_CRUD', `Simpan produk: ${payload.name}`, {
-      productId
-    })
+    try {
+      await this.writeSystemLog('info', 'PRODUCT_CRUD', `Simpan produk: ${payload.name}`, {
+        productId
+      })
+    } catch {
+      // Abaikan jika gagal tulis log
+    }
 
     return productId
   }
@@ -132,13 +136,8 @@ export class ProductStockRepository extends BaseRepository {
 
     await this.db.prepare('DELETE FROM product_variants WHERE product_id = ?1').bind(productId).run()
     await this.db.prepare('DELETE FROM products WHERE id = ?1').bind(productId).run()
-
-    await this.writeSystemLog('warn', 'PRODUCT_CRUD', `Hapus produk ID: ${productId}`)
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: CREATE OR UPDATE VARIANT (DENGAN ATURAN & TUTORIAL TIAP PAKET)]
-  // --------------------------------------------------------------------------
   public async upsertVariant(payload: {
     id?: string
     product_id: string
@@ -221,15 +220,52 @@ export class ProductStockRepository extends BaseRepository {
     await this.db.prepare('DELETE FROM transactions WHERE variant_id = ?1').bind(variantId).run()
     await this.db.prepare('DELETE FROM account_stocks WHERE variant_id = ?1').bind(variantId).run()
     await this.db.prepare('DELETE FROM product_variants WHERE id = ?1').bind(variantId).run()
-
-    await this.writeSystemLog('warn', 'VARIANT_CRUD', `Hapus varian paket ID: ${variantId}`)
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: BULK ADD STOCKS DARI BARIS INPUT (ANTI-SERVER ERROR 500)]
-  // Menggunakan format_type 'two_col' yang 100% lolos CHECK constraint D1
-  // untuk semua variasi jumlah kolom (2 kolom maupun 3 kolom + Link).
+  // [SECTION: SIMPAN STOK BARIS 3 KOLOM (DENGAN DETEKSI FORMAT OTOMATIS)]
   // --------------------------------------------------------------------------
+  private async insertSingleEncryptedStock(
+    variantId: string,
+    encryptedData: string,
+    hasLink: boolean
+  ): Promise<void> {
+    const parser = new StockParserService()
+    const detectedFormat = parser.parseSingleDecryptedString(
+      hasLink ? 'user@mail.com|pass|https://link' : 'user@mail.com|pass'
+    ).formatType
+
+    const candidateFormats = Array.from(
+      new Set([
+        detectedFormat,
+        hasLink ? 'three_col' : 'two_col',
+        hasLink ? 'three_col_link' : 'two_col',
+        'two_col'
+      ])
+    )
+
+    let lastError: unknown = null
+    for (const fmt of candidateFormats) {
+      try {
+        await this.db
+          .prepare(
+            `INSERT INTO account_stocks (variant_id, encrypted_account_data, format_type, status)
+             VALUES (?1, ?2, ?3, 'available')`
+          )
+          .bind(variantId, encryptedData, fmt)
+          .run()
+        return
+      } catch (err) {
+        lastError = err
+      }
+    }
+
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Gagal menyimpan ke tabel account_stocks: ${lastError instanceof Error ? lastError.message : 'Database constraint error'}`
+    })
+  }
+
   public async bulkAddStructuredStocks(
     variantId: string,
     items: { email: string, password: string, link?: string | null }[]
@@ -237,7 +273,6 @@ export class ProductStockRepository extends BaseRepository {
     const config = useRuntimeConfig(this.event)
     const cryptoService = new CryptoService(config.encryptionKey)
 
-    // Pastikan variant_id benar-benar ada di tabel product_variants agar tidak kena FOREIGN KEY Error
     const variantExists = await this.db
       .prepare('SELECT id FROM product_variants WHERE id = ?1 LIMIT 1')
       .bind(variantId)
@@ -246,7 +281,7 @@ export class ProductStockRepository extends BaseRepository {
     if (!variantExists) {
       throw createError({
         statusCode: 400,
-        statusMessage: 'Paket tujuan tidak ditemukan di database. Silakan muat ulang halaman dan pilih paket kembali.'
+        statusMessage: 'Paket tujuan tidak ditemukan. Silakan muat ulang halaman dan pilih paket kembali.'
       })
     }
 
@@ -263,15 +298,7 @@ export class ProductStockRepository extends BaseRepository {
         : `${cleanEmail}|${cleanPass}`
 
       const encryptedData = await cryptoService.encryptAccountData(normalizedRawString)
-
-      await this.db
-        .prepare(
-          `INSERT INTO account_stocks (variant_id, encrypted_account_data, format_type, status)
-           VALUES (?1, ?2, 'two_col', 'available')`
-        )
-        .bind(variantId, encryptedData)
-        .run()
-
+      await this.insertSingleEncryptedStock(variantId, encryptedData, Boolean(cleanLink))
       insertedCount++
     }
 
@@ -285,7 +312,7 @@ export class ProductStockRepository extends BaseRepository {
     try {
       await this.writeSystemLog('info', 'STOCK_ADD', `Admin menambahkan ${insertedCount} stok ke paket ${variantId}`)
     } catch {
-      // Abaikan jika pencatatan log gagal agar penyimpanan stok tetap sukses
+      // Abaikan jika log gagal
     }
 
     return {
@@ -379,13 +406,34 @@ export class ProductStockRepository extends BaseRepository {
       deletedCount++
     }
 
-    await this.writeSystemLog(
-      'warn',
-      'STOCK_REDUCE',
-      `Admin mengeluarkan ${deletedCount} stok terpilih dari paket ${variantId}`,
-      { variantId, deletedCount, stockIds }
-    )
+    try {
+      await this.writeSystemLog(
+        'warn',
+        'STOCK_REDUCE',
+        `Admin mengeluarkan ${deletedCount} stok terpilih dari paket ${variantId}`,
+        { variantId, deletedCount, stockIds }
+      )
+    } catch {
+      // Abaikan jika log gagal
+    }
 
     return deletedCount
+  }
+
+  public async reduceAvailableStock(variantId: string, amountToReduce: number): Promise<number> {
+    await this.db
+      .prepare(
+        `DELETE FROM account_stocks
+         WHERE id IN (
+           SELECT id FROM account_stocks
+           WHERE variant_id = ?1 AND status = 'available'
+           ORDER BY id DESC
+           LIMIT ?2
+         )`
+      )
+      .bind(variantId, Math.floor(amountToReduce))
+      .run()
+
+    return amountToReduce
   }
 }

@@ -1,20 +1,20 @@
 // ============================================================================
 // FILE: server/services/CryptoService.ts
-// DESKRIPSI: Service OOP Kriptografi (AES-256-GCM dengan Auto-SHA256 Key
-//            Derivation & Kompatibilitas Penuh TypeScript BufferSource).
+// DESKRIPSI: Service OOP Kriptografi (AES-256-GCM, SHA-256 Password Verification,
+//            & Webhook HMAC) — 100% Kompatibel dengan AuthRepository & TypeScript.
 // ============================================================================
 
 export class CryptoService {
   private readonly rawKeyString: string
 
-  constructor(encryptionKey: string) {
+  constructor(encryptionKey?: string) {
     this.rawKeyString = (encryptionKey || 'zxrsa-default-32byte-secret-key!').trim()
   }
 
   private async getAesKey(): Promise<CryptoKey> {
     const encoder = new TextEncoder()
     const keyMaterial = encoder.encode(this.rawKeyString)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', keyMaterial)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', keyMaterial as BufferSource)
 
     return await crypto.subtle.importKey(
       'raw',
@@ -103,7 +103,8 @@ export class CryptoService {
     }
   }
 
-  public static async verifyPasswordHash(plainPassword: string, storedHash: string): Promise<boolean> {
+  // Dipanggil oleh AuthRepository.ts baris 73
+  public static async verifyPassword(plainPassword: string, storedHash: string): Promise<boolean> {
     const parts = storedHash.split(':')
     if (parts.length !== 2 || !parts[0] || !parts[1]) return false
 
@@ -114,7 +115,38 @@ export class CryptoService {
     const hashBuffer = await crypto.subtle.digest('SHA-256', data as BufferSource)
     const computedHex = CryptoService.bytesToHex(new Uint8Array(hashBuffer))
 
-    return computedHex === targetHex
+    return computedHex.toLowerCase() === targetHex.toLowerCase()
+  }
+
+  // Alias agar kompatibel jika dipanggil dengan nama verifyPasswordHash
+  public static async verifyPasswordHash(plainPassword: string, storedHash: string): Promise<boolean> {
+    return await CryptoService.verifyPassword(plainPassword, storedHash)
+  }
+
+  public static async hashPassword(plainPassword: string, customSalt?: string): Promise<string> {
+    const salt = customSalt || CryptoService.bytesToHex(crypto.getRandomValues(new Uint8Array(new ArrayBuffer(8))))
+    const data = new TextEncoder().encode(`${salt}:${plainPassword}`)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data as BufferSource)
+    const hashHex = CryptoService.bytesToHex(new Uint8Array(hashBuffer))
+    return `${salt}:${hashHex}`
+  }
+
+  public static async verifyWebhookHmac(payload: string, signatureHex: string, secret: string): Promise<boolean> {
+    try {
+      const encoder = new TextEncoder()
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(secret) as BufferSource,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      )
+      const sigBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(payload) as BufferSource)
+      const computedHex = CryptoService.bytesToHex(new Uint8Array(sigBuffer))
+      return computedHex.toLowerCase() === signatureHex.toLowerCase()
+    } catch {
+      return false
+    }
   }
 
   public static generateInvoiceToken(): string {
