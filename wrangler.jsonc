@@ -18,11 +18,11 @@
 
   "routes": [
     {
-      "pattern": "zioravellune.my.id",
+      "pattern": "zxrsa.biz.id",
       "custom_domain": true,
     },
     {
-      "pattern": "admin.zioravellune.my.id",
+      "pattern": "admin.zxrsa.biz.id",
       "custom_domain": true,
     },
   ],
