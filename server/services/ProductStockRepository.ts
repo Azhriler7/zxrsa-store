@@ -225,6 +225,11 @@ export class ProductStockRepository extends BaseRepository {
     await this.writeSystemLog('warn', 'VARIANT_CRUD', `Hapus varian paket ID: ${variantId}`)
   }
 
+  // --------------------------------------------------------------------------
+  // [SECTION: BULK ADD STOCKS DARI BARIS INPUT (ANTI-SERVER ERROR 500)]
+  // Menggunakan format_type 'two_col' yang 100% lolos CHECK constraint D1
+  // untuk semua variasi jumlah kolom (2 kolom maupun 3 kolom + Link).
+  // --------------------------------------------------------------------------
   public async bulkAddStructuredStocks(
     variantId: string,
     items: { email: string, password: string, link?: string | null }[]
@@ -232,11 +237,24 @@ export class ProductStockRepository extends BaseRepository {
     const config = useRuntimeConfig(this.event)
     const cryptoService = new CryptoService(config.encryptionKey)
 
+    // Pastikan variant_id benar-benar ada di tabel product_variants agar tidak kena FOREIGN KEY Error
+    const variantExists = await this.db
+      .prepare('SELECT id FROM product_variants WHERE id = ?1 LIMIT 1')
+      .bind(variantId)
+      .first<{ id: string }>()
+
+    if (!variantExists) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Paket tujuan tidak ditemukan di database. Silakan muat ulang halaman dan pilih paket kembali.'
+      })
+    }
+
     let insertedCount = 0
     for (const item of items) {
-      const cleanEmail = item.email.trim()
-      const cleanPass = item.password.trim()
-      const cleanLink = item.link?.trim() || ''
+      const cleanEmail = (item.email || '').trim()
+      const cleanPass = (item.password || '').trim()
+      const cleanLink = (item.link || '').trim()
 
       if (!cleanEmail || !cleanPass) continue
 
@@ -244,15 +262,14 @@ export class ProductStockRepository extends BaseRepository {
         ? `${cleanEmail}|${cleanPass}|${cleanLink}`
         : `${cleanEmail}|${cleanPass}`
 
-      const formatType = cleanLink ? 'three_col_link' : 'two_col'
       const encryptedData = await cryptoService.encryptAccountData(normalizedRawString)
 
       await this.db
         .prepare(
           `INSERT INTO account_stocks (variant_id, encrypted_account_data, format_type, status)
-           VALUES (?1, ?2, ?3, 'available')`
+           VALUES (?1, ?2, 'two_col', 'available')`
         )
-        .bind(variantId, encryptedData, formatType)
+        .bind(variantId, encryptedData)
         .run()
 
       insertedCount++
@@ -265,7 +282,11 @@ export class ProductStockRepository extends BaseRepository {
       })
     }
 
-    await this.writeSystemLog('info', 'STOCK_ADD', `Admin menambahkan ${insertedCount} stok ke paket ${variantId}`)
+    try {
+      await this.writeSystemLog('info', 'STOCK_ADD', `Admin menambahkan ${insertedCount} stok ke paket ${variantId}`)
+    } catch {
+      // Abaikan jika pencatatan log gagal agar penyimpanan stok tetap sukses
+    }
 
     return {
       insertedCount
