@@ -391,9 +391,32 @@ export class StorefrontRepository extends BaseRepository {
     }
   }
 
+  // --------------------------------------------------------------------------
+  // [SECTION: STANDAR INDUSTRI PAYMENT FAIL-SAFE & GRACE WINDOW (30 MENIT)]
+  // 1. Mencocokkan transaksi 'pending' terlebih dahulu.
+  // 2. GRACE WINDOW: Jika pembeli bayar di detik terakhir dan timer 5 menit
+  //    keburu 'expired' beberapa detik lalu, tetap pulihkan & lunaskan selama
+  //    masih dalam 30 menit terakhir!
+  // 3. IDEMPOTENCY: Mencegah pengiriman akun ganda jika webhook dikirim 2x.
+  // --------------------------------------------------------------------------
   public async processQrisWebhookMutation(amountPaid: number, externalRefId: string): Promise<string> {
+    const cleanAmount = Math.floor(amountPaid)
+
+    // 1. IDEMPOTENCY CHECK: Cek apakah referensi mutasi ini sudah pernah diproses lunas sebelumnya
+    if (externalRefId && !externalRefId.startsWith('MUTASIKU-')) {
+      const alreadyProcessed = await this.db
+        .prepare(`SELECT id FROM transactions WHERE payment_gateway_ref = ?1 AND status = 'lunas' LIMIT 1`)
+        .bind(externalRefId)
+        .first<{ id: string }>()
+
+      if (alreadyProcessed) {
+        return alreadyProcessed.id
+      }
+    }
+
     await this.releaseExpiredLocks()
 
+    // 2. Cari transaksi yang sedang PENDING, atau baru saja EXPIRED dalam 30 menit terakhir (Grace Window)
     const matchedTx = await this.db
       .prepare(
         `SELECT 
@@ -407,16 +430,27 @@ export class StorefrontRepository extends BaseRepository {
          FROM transactions t
          LEFT JOIN product_variants pv ON pv.id = t.variant_id
          LEFT JOIN products p ON p.id = pv.product_id
-         WHERE t.status = 'pending'
-           AND t.total_amount = ?1
-           AND datetime(t.expires_at) > datetime('now')
-         ORDER BY t.created_at DESC
+         WHERE t.total_amount = ?1
+           AND (
+             (t.status = 'pending' AND datetime(t.expires_at) > datetime('now'))
+             OR
+             (t.status = 'expired' AND datetime(t.created_at) >= datetime('now', '-30 minutes'))
+           )
+         ORDER BY 
+           CASE WHEN t.status = 'pending' THEN 0 ELSE 1 END,
+           t.created_at DESC
          LIMIT 1`
       )
-      .bind(Math.floor(amountPaid))
+      .bind(cleanAmount)
       .first<AdminTransactionRow & { delivered_account_data: string | null }>()
 
     if (!matchedTx) {
+      await this.writeSystemLog(
+        'warn',
+        'WEBHOOK_UNMATCHED',
+        `Mutasi masuk Rp ${cleanAmount} (${externalRefId}), namun tidak ada invoice aktif yang cocok.`,
+        { amountPaid: cleanAmount, externalRefId }
+      )
       throw createError({
         statusCode: 404,
         statusMessage: 'Tidak ada transaksi pending yang cocok dengan nominal tersebut.'
@@ -430,6 +464,13 @@ export class StorefrontRepository extends BaseRepository {
 
     const adminInvoiceRepo = new AdminInvoiceRepository(this.event)
     await adminInvoiceRepo.settleTransactionAndDeliver(matchedTx)
+
+    await this.writeSystemLog(
+      'info',
+      'WEBHOOK_SETTLED',
+      `Pembayaran QRIS Rp ${cleanAmount} berhasil melunaskan Invoice ${matchedTx.id}`,
+      { invoiceId: matchedTx.id, amountPaid: cleanAmount, externalRefId }
+    )
 
     return matchedTx.id
   }
