@@ -107,11 +107,6 @@ export class EmailService {
       <h4 style="color:#fbbf24;margin:0 0 6px 0;font-size:14px;">Aturan Pemakaian & Ketentuan Garansi:</h4>
       <p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.6;">${rules}</p>
     </div>
-    <div style="margin-top:26px;text-align:center;">
-      <a href="${esc(invoiceUrl)}" style="background-color:#0284c7;color:#ffffff;padding:12px 22px;border-radius:8px;font-size:13px;font-weight:bold;text-decoration:none;display:inline-block;">
-        Buka Halaman Invoice Resmi
-      </a>
-    </div>
   </div>
 </body>
 </html>`
