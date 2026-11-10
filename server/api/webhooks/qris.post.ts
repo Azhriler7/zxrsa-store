@@ -1,9 +1,9 @@
 // ============================================================================
 // FILE: server/api/webhooks/qris.post.ts
-// DESKRIPSI: Endpoint Webhook Resmi Mutasiku.co.id
-//            - Verifikasi HMAC-SHA256 atas JSON.stringify(payload.data)
-//            - Mendukung Event 'mutations.created' & 'payment.completed'
-//            - Mendukung Pengujian Sandbox Mutasiku (Selalu Return 200 OK)
+// DESKRIPSI: Dual-Gateway Webhook Engine (Mutasiku.co + PayHook v1.11 Resmi)
+//            - Rumus HMAC PayHook: HMAC-SHA256("{timestamp}.{raw_body}", secret)
+//            - Rumus HMAC Mutasiku: HMAC-SHA256(JSON.stringify(payload.data), secret)
+//            - Mendukung CORS Web Simulator PayHook, Heartbeat, & Idempotency event_id
 // ============================================================================
 
 import { StorefrontRepository } from '../../services/StorefrontRepository'
@@ -23,25 +23,46 @@ async function computeHmacSha256Hex(message: string, secret: string): Promise<st
     .join('')
 }
 
-function timingSafeHexEqual(a: string, b: string): boolean {
-  const cleanA = a.replace(/^sha256=/i, '').trim().toLowerCase()
-  const cleanB = b.replace(/^sha256=/i, '').trim().toLowerCase()
-  if (cleanA.length !== cleanB.length || cleanA.length === 0) return false
-
-  let mismatch = 0
-  for (let i = 0; i < cleanA.length; i++) {
-    mismatch |= cleanA.charCodeAt(i) ^ cleanB.charCodeAt(i)
-  }
-  return mismatch === 0
+function cleanSecretValue(val: unknown): string {
+  return String(val || '')
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .trim()
 }
 
 export default defineEventHandler(async (event) => {
+  // 1. Dukungan CORS agar tombol "Kirim Test (Live)" dari Web Simulator PayHook tidak diblokir browser
+  setResponseHeaders(event, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Webhook-Signature, X-Payhook-Timestamp, X-Payhook-Nonce, X-Payhook-Signature'
+  })
+
+  if (getMethod(event) === 'OPTIONS') {
+    setResponseStatus(event, 204)
+    return ''
+  }
+
   const config = useRuntimeConfig(event)
+  const cfEnv = (event.context.cloudflare?.env || {}) as Record<string, unknown>
+
   const rawBody = (await readRawBody(event, 'utf-8')) || '{}'
   const query = getQuery(event)
 
-  const webhookSecret = String(config.webhookHmacSecret || '').trim()
-  const mutasikuApiKey = String(config.mutasikuApiKey || '').trim()
+  // Kumpulkan semua Secret aktif (Mutasiku & PayHook)
+  const candidateSecrets = Array.from(
+    new Set(
+      [
+        cleanSecretValue(config.payhookSecret),
+        cleanSecretValue(config.webhookHmacSecret),
+        cleanSecretValue(config.mutasikuApiKey),
+        cleanSecretValue(cfEnv['NUXT_PAYHOOK_SECRET']),
+        cleanSecretValue(cfEnv['NUXT_WEBHOOK_HMAC_SECRET']),
+        cleanSecretValue(process.env.NUXT_PAYHOOK_SECRET),
+        cleanSecretValue(process.env.NUXT_WEBHOOK_HMAC_SECRET)
+      ].filter(Boolean)
+    )
+  )
 
   let parsedPayload: Record<string, unknown>
   try {
@@ -53,53 +74,77 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const eventType = String(parsedPayload['type'] || 'unknown')
-  const payloadData = (parsedPayload['data'] && typeof parsedPayload['data'] === 'object')
-    ? (parsedPayload['data'] as Record<string, unknown>)
-    : parsedPayload
+  // --------------------------------------------------------------------------
+  // [SECTION: VERIFIKASI AUTENTIKASI & HMAC (PAYHOOK & MUTASIKU)]
+  // --------------------------------------------------------------------------
+  const payhookTimestamp = String(getHeader(event, 'x-payhook-timestamp') || '').trim()
+  const payhookSignature = String(getHeader(event, 'x-payhook-signature') || '')
+    .replace(/^sha256=/i, '')
+    .trim()
+    .toLowerCase()
 
-  // --------------------------------------------------------------------------
-  // [SECTION: VERIFIKASI SIGNATURE RESMI MUTASIKU]
-  // Sesuai dok resmi: signature = HMAC-SHA256(JSON.stringify(payload.data), webhookSecret)
-  // --------------------------------------------------------------------------
-  const signatureHeader = (
+  const mutasikuSignature = String(
     getHeader(event, 'x-webhook-signature')
     || getHeader(event, 'x-mutasiku-signature')
     || getHeader(event, 'x-signature')
     || ''
-  ).trim()
+  )
+    .replace(/^sha256=/i, '')
+    .trim()
+    .toLowerCase()
 
-  const queryKey = String(query.key || query.secret || '').trim()
-  const validSecrets = [webhookSecret, mutasikuApiKey].filter(Boolean)
+  const authHeader = String(getHeader(event, 'authorization') || '').trim()
+  const bearerToken = cleanSecretValue(authHeader.replace(/^Bearer\s+/i, ''))
+  const apiKeyHeader = cleanSecretValue(getHeader(event, 'x-api-key') || getHeader(event, 'x-webhook-key') || '')
+  const queryKey = cleanSecretValue(query.key || query.secret || query.token)
+
+  // Anti-replay PayHook: tolak jika timestamp PayHook terpaut lebih dari 5 menit (300 detik)
+  if (payhookTimestamp) {
+    const tsSeconds = Number(payhookTimestamp)
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    if (!Number.isNaN(tsSeconds) && Math.abs(nowSeconds - tsSeconds) > 300) {
+      throw createError({
+        statusCode: 408,
+        statusMessage: 'PayHook timestamp expired (> 5 minutes).'
+      })
+    }
+  }
 
   let isVerified = false
-  if (validSecrets.length === 0) {
-    // Jika secret belum diset di env, izinkan lewat untuk mempermudah setup awal
+  if (candidateSecrets.length === 0) {
     isVerified = true
   } else {
     const dataJsonString = JSON.stringify(parsedPayload['data'] ?? {})
 
-    for (const secret of validSecrets) {
-      // 1. Cek sesuai rumus resmi Mutasiku: HMAC-SHA256(JSON.stringify(payload.data), secret)
-      if (signatureHeader) {
-        const expectedDataSig = await computeHmacSha256Hex(dataJsonString, secret)
-        if (timingSafeHexEqual(signatureHeader, expectedDataSig)) {
-          isVerified = true
-          break
-        }
-
-        // 2. Fallback jika ditandatangani menggunakan rawBody utuh
-        const expectedRawSig = await computeHmacSha256Hex(rawBody, secret)
-        if (timingSafeHexEqual(signatureHeader, expectedRawSig)) {
+    for (const secret of candidateSecrets) {
+      // A. Cek Verifikasi HMAC Resmi PayHook: HMAC-SHA256("{timestamp}.{raw_body}", secret)
+      if (payhookSignature && payhookTimestamp) {
+        const expectedPayhookHmac = (
+          await computeHmacSha256Hex(`${payhookTimestamp}.${rawBody}`, secret)
+        ).toLowerCase()
+        if (payhookSignature === expectedPayhookHmac) {
           isVerified = true
           break
         }
       }
 
-      // 3. Fallback jika menggunakan ?key=SECRET di URL
-      if (queryKey && queryKey === secret) {
+      // B. Cek Verifikasi Bearer Token / X-API-Key PayHook
+      if (
+        (bearerToken && bearerToken === secret)
+        || (apiKeyHeader && apiKeyHeader === secret)
+        || (queryKey && queryKey === secret)
+      ) {
         isVerified = true
         break
+      }
+
+      // C. Cek Verifikasi HMAC Resmi Mutasiku: HMAC-SHA256(JSON.stringify(payload.data), secret)
+      if (mutasikuSignature) {
+        const expectedMutasikuDataSig = (await computeHmacSha256Hex(dataJsonString, secret)).toLowerCase()
+        if (mutasikuSignature === expectedMutasikuDataSig) {
+          isVerified = true
+          break
+        }
       }
     }
   }
@@ -107,81 +152,116 @@ export default defineEventHandler(async (event) => {
   if (!isVerified) {
     throw createError({
       statusCode: 401,
-      statusMessage: 'Invalid signature'
+      statusMessage: 'Unauthorized Webhook Token or HMAC Signature.'
     })
   }
 
   // --------------------------------------------------------------------------
-  // [SECTION: FILTER EVENT & EKSTRAKSI NOMINAL DEFAULT MUTASIKU]
-  // 1. Event 'mutations.created':
-  //    { type: 'mutations.created', data: { accountId, amount: 1000000, type: 'CREDIT', ... } }
-  // 2. Event 'payment.completed':
-  //    { type: 'payment.completed', data: { id, amount: 1000000, status: 'COMPLETED', ... } }
+  // [SECTION: DETEKSI HEARTBEAT PAYHOOK]
   // --------------------------------------------------------------------------
-  if (eventType === 'mutations.created') {
-    const mutationDirection = String(payloadData['type'] || 'CREDIT').toUpperCase()
-    if (mutationDirection && mutationDirection !== 'CREDIT' && mutationDirection !== 'CR' && mutationDirection !== 'IN') {
+  if (parsedPayload['type'] === 'heartbeat') {
+    return {
+      status: 'ok',
+      received: true,
+      type: 'heartbeat',
+      device_id: parsedPayload['device_id'] || null
+    }
+  }
+
+  // Deteksi apakah payload berasal dari PayHook atau Mutasiku
+  const isPayHook = parsedPayload['sent_by'] === 'PayHook' || Boolean(parsedPayload['event_id'])
+  const gatewaySource = isPayHook ? 'PAYHOOK' : 'MUTASIKU'
+
+  // --------------------------------------------------------------------------
+  // [SECTION: FILTER ARAH DANA MASUK (ABAIKAN DANA KELUAR)]
+  // --------------------------------------------------------------------------
+  if (isPayHook) {
+    const direction = String(parsedPayload['direction'] || 'in').toLowerCase()
+    const eventType = String(parsedPayload['event_type'] || 'payment.incoming').toLowerCase()
+    if (direction === 'out' || eventType === 'payment.outgoing') {
+      return {
+        status: 'ok',
+        received: true,
+        ignored: true,
+        gateway: 'PAYHOOK',
+        reason: 'Notifikasi uang keluar (payment.outgoing) diabaikan.'
+      }
+    }
+  } else if (parsedPayload['type'] === 'mutations.created') {
+    const mutData = (parsedPayload['data'] || {}) as Record<string, unknown>
+    const mutDir = String(mutData['type'] || 'CREDIT').toUpperCase()
+    if (mutDir !== 'CREDIT' && mutDir !== 'CR' && mutDir !== 'IN') {
       return {
         received: true,
         ignored: true,
-        reason: `Mutasi bertipe ${mutationDirection} (bukan dana masuk/CREDIT) diabaikan.`
+        gateway: 'MUTASIKU',
+        reason: `Mutasi bertipe ${mutDir} diabaikan.`
       }
     }
   }
+
+  // --------------------------------------------------------------------------
+  // [SECTION: EKSTRAKSI NOMINAL & IDEMPOTENCY KEY]
+  // PayHook mengirim: { event_id: "evt_...", amount: 300000, reference: "PH-..." }
+  // Mutasiku mengirim: { type: "mutations.created", data: { accountId, amount: 300000 } }
+  // --------------------------------------------------------------------------
+  const payloadData = (parsedPayload['data'] && typeof parsedPayload['data'] === 'object')
+    ? (parsedPayload['data'] as Record<string, unknown>)
+    : parsedPayload
 
   const transactionNested = (payloadData['transaction'] && typeof payloadData['transaction'] === 'object')
     ? (payloadData['transaction'] as Record<string, unknown>)
     : null
 
-  const detectedAmount = Number(
-    payloadData['amount']
-    || (transactionNested && transactionNested['amount'])
-    || payloadData['kredit']
-    || payloadData['nominal']
-    || 0
+  const detectedAmount = Math.floor(
+    Number(
+      parsedPayload['amount']
+      || payloadData['amount']
+      || (transactionNested && transactionNested['amount'])
+      || 0
+    )
   )
 
+  // Gunakan event_id dari PayHook sebagai Idempotency Key agar retry tidak dobel
   const externalRef = String(
-    payloadData['id']
-    || (transactionNested && transactionNested['id'])
-    || payloadData['orderId']
+    parsedPayload['event_id']
+    || parsedPayload['reference']
+    || payloadData['id']
+    || payloadData['paymentId']
     || payloadData['accountId']
-    || `MUTASIKU-${Date.now()}`
+    || `${gatewaySource}-${Date.now()}`
   )
 
-  // Jika event selain pembayaran/mutasi (misal test account.created / balance.updated di Sandbox)
   if (!detectedAmount || detectedAmount <= 0) {
     return {
+      status: 'ok',
       received: true,
-      eventType,
-      message: 'Event webhook diterima dengan signature valid (tidak ada nominal yang perlu dicocokkan).'
+      gateway: gatewaySource,
+      message: 'Webhook diterima, namun nominal 0.'
     }
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: PROSES PELUNASAN INVOICE & DUKUNGAN SANDBOX 200 OK]
-  // Jika nominal cocok dengan invoice aktif -> Otomatis LUNAS & Kirim Akun.
-  // Jika nominal dari Sandbox (misal Rp 1.000.000) tidak ada di invoice aktif ->
-  // Tetap kembalikan HTTP 200 { received: true } sesuai Best Practice Mutasiku!
-  // --------------------------------------------------------------------------
   const repo = new StorefrontRepository(event)
 
   try {
     const settledInvoiceId = await repo.processQrisWebhookMutation(detectedAmount, externalRef)
     return {
+      status: 'ok',
       received: true,
       matched: true,
-      eventType,
+      gateway: gatewaySource,
       settledInvoiceId,
       amount: detectedAmount
     }
   } catch {
     return {
+      status: 'ok',
       received: true,
       matched: false,
-      eventType,
+      gateway: gatewaySource,
       amount: detectedAmount,
-      message: 'Webhook diterima & signature valid. Tidak ada invoice pending dengan nominal tersebut (Normal saat tes Sandbox).'
+      is_test: Boolean(parsedPayload['is_test']),
+      message: `Webhook ${gatewaySource} diterima (Rp ${detectedAmount}), namun tidak ada invoice pending dengan nominal tersebut.`
     }
   }
 })

@@ -22,6 +22,7 @@ export default defineNuxtConfig({
     qrisStaticString: process.env.NUXT_QRIS_STATIC_STRING || '',
     webhookHmacSecret: process.env.NUXT_WEBHOOK_HMAC_SECRET || '',
     mutasikuApiKey: process.env.NUXT_MUTASIKU_API_KEY || '',
+    payhookSecret: process.env.NUXT_PAYHOOK_SECRET || '',
     mailApiKey: process.env.NUXT_MAIL_API_KEY || '',
     mailFrom: process.env.NUXT_MAIL_FROM || '',
 
