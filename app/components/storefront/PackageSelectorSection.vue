@@ -329,7 +329,7 @@ function formatRupiah(val: number) {
                       {{ currentProduct.name }} — {{ selectedVariant.name }}
                     </h3>
                     <p class="text-xs text-muted">
-                      Durasi {{ selectedVariant.duration }} • Kunci Stok 5 Menit
+                      Durasi {{ selectedVariant.duration }} • Kunci Stok 10 Menit
                     </p>
                   </div>
                 </div>
@@ -408,8 +408,8 @@ function formatRupiah(val: number) {
 
       <CommonConfirmDialog
         v-model:open="isConfirmCheckoutOpen"
-        title="Konfirmasi Pemesanan & Kunci Stok (5 Menit)"
-        :description="`Sistem akan mengunci stok paket '${selectedVariant?.name}' selama 5 menit dan mengirimkan Invoice ke '${formState.customer_email}'. Lanjutkan ke pembayaran QRIS?`"
+        title="Konfirmasi Pemesanan & Kunci Stok (10 Menit)"
+        :description="`Sistem akan mengunci stok paket '${selectedVariant?.name}' selama 10 menit dan mengirimkan Invoice ke '${formState.customer_email}'. Lanjutkan ke pembayaran QRIS?`"
         confirm-label="Ya, Buat QRIS Sekarang"
         confirm-color="primary"
         :loading="isCreatingInvoice"
