@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: server/services/AdminInvoiceRepository.ts
-// DESKRIPSI: Repository OOP untuk Manajemen Invoice Admin, Pengiriman Akun,
-//            serta Pengiriman Aturan & Tutorial Paket ke Email Gmail Pembeli.
+// DESKRIPSI: Repository OOP Manajemen Invoice Admin & Instant Settlement
+//            (Menggunakan Cloudflare waitUntil agar Webhook merespons < 50ms).
 // ============================================================================
 
 import type { CustomGmailStatus, TransactionStatus } from '../types/database'
@@ -143,6 +143,11 @@ export class AdminInvoiceRepository extends BaseRepository {
     await this.writeSystemLog('warn', 'INVOICE_STATUS', `Admin ubah status ${transactionId} -> ${newStatus}`)
   }
 
+  // --------------------------------------------------------------------------
+  // [SECTION: INSTANT SETTLEMENT & NON-BLOCKING BACKGROUND EMAIL]
+  // Status di D1 langsung berubah ke 'lunas' seketika, sementara pengiriman
+  // email ke Resend dijalankan di latar belakang via event.waitUntil().
+  // --------------------------------------------------------------------------
   public async settleTransactionAndDeliver(
     tx: AdminTransactionRow & { delivered_account_data?: string | null }
   ): Promise<void> {
@@ -157,7 +162,7 @@ export class AdminInvoiceRepository extends BaseRepository {
     let encryptedStockToSnapshot: string | null = tx.delivered_account_data || null
     let parsedAccount: { email: string, password: string, extraInfoLink: string | null } | null = null
 
-    if (tx.is_custom_gmail === 0) {
+    if (Number(tx.is_custom_gmail) === 0) {
       let stockId = tx.account_stock_id
 
       if (!stockId) {
@@ -199,6 +204,7 @@ export class AdminInvoiceRepository extends BaseRepository {
       }
     }
 
+    // 1. Langsung simpan status LUNAS & kredensial akun ke database D1 detik ini juga!
     await this.db
       .prepare(
         `UPDATE transactions
@@ -211,39 +217,46 @@ export class AdminInvoiceRepository extends BaseRepository {
       .bind(encryptedStockToSnapshot, tx.id)
       .run()
 
-    if (tx.is_custom_gmail === 0 && parsedAccount) {
-      try {
-        await emailService.sendInvoiceEmail({
-          toEmail: tx.customer_email,
-          invoiceId: tx.id,
-          invoiceToken: tx.invoice_token,
-          productName: tx.product_name,
-          variantName: tx.variant_name,
-          duration: tx.duration,
-          totalAmount: tx.total_amount,
-          isCustomGmail: false,
-          accountEmail: parsedAccount.email,
-          accountPassword: parsedAccount.password,
-          accountExtraLink: parsedAccount.extraInfoLink,
-          usageRules: tx.usage_rules,
-          tutorialText: tx.tutorial_text
-        })
+    // 2. Kirim email secara asinkron (Non-Blocking) agar Webhook langsung selesai & layar pembeli langsung berubah LUNAS
+    if (Number(tx.is_custom_gmail) === 0 && parsedAccount) {
+      const accountToSend = parsedAccount
+      const sendEmailTask = async () => {
+        try {
+          await emailService.sendInvoiceEmail({
+            toEmail: tx.customer_email,
+            invoiceId: tx.id,
+            invoiceToken: tx.invoice_token,
+            productName: tx.product_name,
+            variantName: tx.variant_name,
+            duration: tx.duration,
+            totalAmount: Number(tx.total_amount || 0),
+            isCustomGmail: false,
+            accountEmail: accountToSend.email,
+            accountPassword: accountToSend.password,
+            accountExtraLink: accountToSend.extraInfoLink,
+            usageRules: tx.usage_rules || '-',
+            tutorialText: tx.tutorial_text || null
+          })
 
-        await this.db
-          .prepare(`UPDATE transactions SET email_sent_at = datetime('now') WHERE id = ?1`)
-          .bind(tx.id)
-          .run()
-      } catch (err) {
-        await this.writeSystemLog('error', 'EMAIL_SEND', `Gagal kirim email otomatis untuk ${tx.id}`, {
-          error: err instanceof Error ? err.message : 'Unknown error'
-        })
+          await this.db
+            .prepare(`UPDATE transactions SET email_sent_at = datetime('now') WHERE id = ?1`)
+            .bind(tx.id)
+            .run()
+        } catch (err) {
+          await this.writeSystemLog('error', 'EMAIL_SEND', `Gagal kirim email otomatis untuk ${tx.id}`, {
+            error: err instanceof Error ? err.message : 'Unknown error'
+          })
+        }
+      }
+
+      if (typeof this.event.waitUntil === 'function') {
+        this.event.waitUntil(sendEmailTask())
+      } else {
+        await sendEmailTask()
       }
     }
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: CONFIRM CUSTOM GMAIL QUEUE (DEFENSIVE TRY/CATCH ANTI-500)]
-  // --------------------------------------------------------------------------
   public async confirmCustomGmailCompleted(transactionId: string): Promise<{ emailSent: boolean, emailError: string | null }> {
     const tx = await this.db
       .prepare(
@@ -267,7 +280,6 @@ export class AdminInvoiceRepository extends BaseRepository {
       throw createError({ statusCode: 404, statusMessage: 'Transaksi tidak ditemukan.' })
     }
 
-    // 1. Update status di database terlebih dahulu agar 100% selalu berhasil
     await this.db
       .prepare(
         `UPDATE transactions
@@ -278,7 +290,6 @@ export class AdminInvoiceRepository extends BaseRepository {
       .bind(transactionId)
       .run()
 
-    // 2. Kirim email ke pembeli dengan pelindung try/catch agar tidak pernah melempar Server Error 500
     const config = useRuntimeConfig(this.event)
     const emailService = new EmailService({
       apiKey: config.mailApiKey,
@@ -326,9 +337,6 @@ export class AdminInvoiceRepository extends BaseRepository {
     return await this.confirmCustomGmailCompleted(transactionId)
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: RESEND INVOICE EMAIL MANUALLY]
-  // --------------------------------------------------------------------------
   public async resendInvoiceEmailById(transactionId: string): Promise<void> {
     const tx = await this.db
       .prepare(

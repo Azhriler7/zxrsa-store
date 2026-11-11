@@ -184,7 +184,8 @@ export class StorefrontRepository extends BaseRepository {
       })
     }
 
-    const expiresDate = new Date(Date.now() + 5 * 60 * 1000)
+    // TIMER PEMBAYARAN QRIS & KUNCI STOK: 10 MENIT
+    const expiresDate = new Date(Date.now() + 10 * 60 * 1000)
     const expiresIso = expiresDate.toISOString()
 
     let lockedStockId: number | null = null

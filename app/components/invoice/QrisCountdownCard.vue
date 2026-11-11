@@ -1,6 +1,6 @@
 <!-- ==========================================================================
  FILE: app/components/invoice/QrisCountdownCard.vue
- DESKRIPSI: Komponen Lego QRIS Dinamis Berukuran Besar + Timer 5 Menit Desain
+ DESKRIPSI: Komponen Lego QRIS Dinamis Berukuran Besar + Timer 10 Menit Desain
             Mencolok + Fitur Download QRIS sebagai Gambar (.PNG).
 =========================================================================== -->
 <script setup lang="ts">
@@ -42,15 +42,14 @@ const secondsFormatted = computed(() =>
   (remainingSeconds.value % 60).toString().padStart(2, '0')
 )
 
-// Persentase progress bar dari total 5 menit (300 detik)
+// Persentase progress bar dari total 10 menit (600 detik)
 const progressPercentage = computed(() => {
-  return Math.min(100, Math.max(0, Math.round((remainingSeconds.value / 300) * 100)))
+  return Math.min(100, Math.max(0, Math.round((remainingSeconds.value / 600) * 100)))
 })
 
 async function renderQrisImages() {
   if (!props.qrisString) return
   try {
-    // 1. Gambar untuk tampilan layar (320px)
     qrDataUrl.value = await QRCode.toDataURL(props.qrisString, {
       width: 340,
       margin: 2,
@@ -60,7 +59,6 @@ async function renderQrisImages() {
       }
     })
 
-    // 2. Gambar Resolusi Tinggi (720px) khusus untuk fitur Download Gambar QRIS
     qrDownloadHiResUrl.value = await QRCode.toDataURL(props.qrisString, {
       width: 720,
       margin: 4,
@@ -115,7 +113,7 @@ function downloadQrisAsImage() {
 <template>
   <UCard class="border-2 border-primary/50 shadow-xl overflow-hidden">
     <div class="space-y-6 text-center">
-      <!-- BANNER COUNTDOWN TIMER 5 MENIT BESAR & MENCOLOK -->
+      <!-- BANNER COUNTDOWN TIMER 10 MENIT BESAR & MENCOLOK -->
       <div
         class="p-4 sm:p-5 rounded-2xl border-2 transition-colors space-y-3"
         :class="
@@ -129,7 +127,7 @@ function downloadQrisAsImage() {
             name="i-lucide-timer"
             class="w-5 h-5 animate-bounce"
           />
-          <span>Batas Waktu Pembayaran QRIS (5 Menit)</span>
+          <span>Batas Waktu Pembayaran QRIS (10 Menit)</span>
         </div>
 
         <!-- ANGKA DIGITAL BESAR -->
@@ -200,7 +198,7 @@ function downloadQrisAsImage() {
           {{ totalAmountFormatted }}
         </div>
         <p class="text-[11px] text-muted">
-          Penting: Jangan mengubah nominal di atas agar sistem memverifikasi lunas secara otomatis dalam 3 detik.
+          Penting: Jangan mengubah nominal di atas agar sistem memverifikasi lunas secara otomatis.
         </p>
       </div>
 

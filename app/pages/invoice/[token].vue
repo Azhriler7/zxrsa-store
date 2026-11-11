@@ -61,13 +61,19 @@ watch(
 )
 
 // Polling cepat setiap 2.5 detik selama masih pending
+const isPolling = ref(false)
 const { pause } = useIntervalFn(async () => {
-  if (data.value?.invoice?.status === 'pending') {
-    await refresh()
-  } else {
+  if (data.value?.invoice?.status === 'pending' && !isPolling.value) {
+    isPolling.value = true
+    try {
+      await refresh()
+    } finally {
+      isPolling.value = false
+    }
+  } else if (data.value?.invoice?.status && data.value.invoice.status !== 'pending') {
     pause()
   }
-}, 2500)
+}, 1500)
 
 // INSTANT TRIGGER: Begitu pembeli selesai bayar di aplikasi DANA/Bank lalu kembali ke tab browser, langsung cek detik itu juga!
 onMounted(() => {
@@ -254,7 +260,7 @@ function formatRupiah(val: number) {
               Transaksi {{ data.invoice.status.toUpperCase() }}
             </h2>
             <p class="text-xs text-muted">
-              Batas waktu pembayaran QRIS 5 menit telah berakhir atau pesanan dibatalkan.
+              Batas waktu pembayaran QRIS 10 menit telah berakhir atau pesanan dibatalkan.
             </p>
           </div>
           <UButton
