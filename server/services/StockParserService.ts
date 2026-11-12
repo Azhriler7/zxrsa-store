@@ -1,156 +1,83 @@
 // ============================================================================
 // FILE: server/services/StockParserService.ts
-// DESKRIPSI: Penerapan OOP Polymorphism (Strategy Pattern) untuk membaca,
-//            memvalidasi, dan memisahkan stok akun dari berbagai format .txt.
+// DESKRIPSI: Service OOP Parser Stok Akun (Mendukung Email+Password,
+//            Email+Link Tanpa Password, & Email+Password+Link).
 // ============================================================================
-
-import type { StockFormatType } from '../types/database'
 
 export interface ParsedStockItem {
   email: string
   password: string
   extraInfoLink: string | null
-  normalizedRawString: string // Format seragam yang akan dienkripsi ke D1
-  formatType: StockFormatType
+  formatType: 'two_col' | 'three_col'
+  rawNormalized: string
 }
 
-export interface BulkParseResult {
+export interface StockParseSummary {
   validItems: ParsedStockItem[]
-  invalidLines: { lineNumber: number, content: string, reason: string }[]
+  invalidLines: string[]
 }
 
-// ----------------------------------------------------------------------------
-// [INTERFACE POLYMORPHISM: KONTRAK PARSER BARIS .TXT]
-// ----------------------------------------------------------------------------
-export interface IStockLineParser {
-  canParse(parts: string[]): boolean
-  parse(parts: string[]): ParsedStockItem
-}
+export class StockParserService {
+  public parseSingleDecryptedString(rawLine: string): ParsedStockItem {
+    const trimmed = (rawLine || '').trim()
+    const parts = trimmed.split('|').map(p => p.trim())
 
-// ----------------------------------------------------------------------------
-// [STRATEGY 1: PARSER FORMAT 2 KOLOM]
-// Contoh: 62vy1o0l@acqf.poj.me|masuk123
-// ----------------------------------------------------------------------------
-export class TwoColumnStockParser implements IStockLineParser {
-  public canParse(parts: string[]): boolean {
-    return parts.length === 2
-  }
+    const email = parts[0] || ''
+    let password = ''
+    let extraInfoLink: string | null = null
 
-  public parse(parts: string[]): ParsedStockItem {
-    const email = (parts[0] || '').trim()
-    const password = (parts[1] || '').trim()
-
-    if (!email.includes('@') || !password) {
-      throw new Error('Format email atau password pada 2 kolom tidak valid.')
+    if (parts.length >= 3) {
+      // Format 3 kolom: email | password (bisa kosong) | link
+      password = parts[1] || ''
+      const joinedLink = parts.slice(2).join('|').trim()
+      extraInfoLink = joinedLink.length > 0 ? joinedLink : null
+    } else if (parts.length === 2) {
+      const secondCol = parts[1] || ''
+      // Jika kolom ke-2 langsung berupa URL (http:// atau https://), maka itu adalah Link (tanpa password)
+      if (/^https?:\/\//i.test(secondCol)) {
+        password = ''
+        extraInfoLink = secondCol
+      } else {
+        password = secondCol
+        extraInfoLink = null
+      }
     }
 
-    return {
-      email,
-      password,
-      extraInfoLink: null,
-      normalizedRawString: `${email}|${password}`,
-      formatType: 'two_columns'
-    }
-  }
-}
-
-// ----------------------------------------------------------------------------
-// [STRATEGY 2: PARSER FORMAT 3 KOLOM DENGAN LINK GENERATOR]
-// Contoh: hifidxhen672@ydah.me | Masuk12345- | https://generator.email/...
-// ----------------------------------------------------------------------------
-export class ThreeColumnStockParser implements IStockLineParser {
-  public canParse(parts: string[]): boolean {
-    return parts.length >= 3
-  }
-
-  public parse(parts: string[]): ParsedStockItem {
-    const email = (parts[0] || '').trim()
-    const password = (parts[1] || '').trim()
-    const extraInfoLink = parts.slice(2).join('|').trim()
-
-    if (!email.includes('@') || !password || !extraInfoLink) {
-      throw new Error('Format email, password, atau link generator pada 3 kolom tidak lengkap.')
-    }
+    const formatType: 'two_col' | 'three_col' = extraInfoLink ? 'three_col' : 'two_col'
+    const rawNormalized = extraInfoLink
+      ? `${email}|${password}|${extraInfoLink}`
+      : `${email}|${password}`
 
     return {
       email,
       password,
       extraInfoLink,
-      normalizedRawString: `${email}|${password}|${extraInfoLink}`,
-      formatType: 'three_columns'
+      formatType,
+      rawNormalized
     }
   }
-}
 
-// ----------------------------------------------------------------------------
-// [MAIN ORCHESTRATOR CLASS: STOCK PARSER SERVICE]
-// ----------------------------------------------------------------------------
-export class StockParserService {
-  private readonly strategies: IStockLineParser[]
-
-  constructor() {
-    // Daftarkan semua strategi parser polymorphic
-    this.strategies = [
-      new TwoColumnStockParser(),
-      new ThreeColumnStockParser()
-    ]
-  }
-
-  // --------------------------------------------------------------------------
-  // [SECTION: PARSE SELURUH ISI FILE .TXT]
-  // Memisahkan baris demi baris dan mendeteksi formatnya secara otomatis
-  // --------------------------------------------------------------------------
-  public parseTxtContent(rawTxtContent: string): BulkParseResult {
-    const lines = rawTxtContent
+  public parseTxtContent(rawContent: string): StockParseSummary {
+    const lines = (rawContent || '')
       .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
+      .map(l => l.trim())
+      .filter(l => l.length > 0)
 
     const validItems: ParsedStockItem[] = []
-    const invalidLines: { lineNumber: number, content: string, reason: string }[] = []
+    const invalidLines: string[] = []
 
-    lines.forEach((line, index) => {
-      const lineNumber = index + 1
-      const parts = line.split('|').map(p => p.trim())
-
-      const matchedStrategy = this.strategies.find(strategy => strategy.canParse(parts))
-
-      if (!matchedStrategy) {
-        invalidLines.push({
-          lineNumber,
-          content: line,
-          reason: 'Jumlah kolom tidak dikenali (harus dipisah tanda "|" menjadi 2 atau 3 bagian).'
-        })
-        return
+    for (const line of lines) {
+      const parsed = this.parseSingleDecryptedString(line)
+      if (parsed.email.length >= 3 && (parsed.password.length > 0 || Boolean(parsed.extraInfoLink))) {
+        validItems.push(parsed)
+      } else {
+        invalidLines.push(line)
       }
-
-      try {
-        const parsedItem = matchedStrategy.parse(parts)
-        validItems.push(parsedItem)
-      } catch (err) {
-        invalidLines.push({
-          lineNumber,
-          content: line,
-          reason: err instanceof Error ? err.message : 'Gagal memproses baris.'
-        })
-      }
-    })
-
-    return { validItems, invalidLines }
-  }
-
-  // --------------------------------------------------------------------------
-  // [SECTION: FORMAT DATA AKUN UNTUK DITAMPILKAN DI INVOICE / EMAIL]
-  // Mengubah string hasil dekripsi kembali menjadi objek terstruktur
-  // --------------------------------------------------------------------------
-  public parseSingleDecryptedString(decryptedString: string): ParsedStockItem {
-    const parts = decryptedString.split('|').map(p => p.trim())
-    const matchedStrategy = this.strategies.find(strategy => strategy.canParse(parts))
-
-    if (!matchedStrategy) {
-      throw new Error('[STOCK_PARSE_ERROR] Data stok terdekripsi tidak sesuai format.')
     }
 
-    return matchedStrategy.parse(parts)
+    return {
+      validItems,
+      invalidLines
+    }
   }
 }

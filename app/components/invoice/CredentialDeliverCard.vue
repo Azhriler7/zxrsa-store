@@ -1,6 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/invoice/CredentialDeliverCard.vue
- DESKRIPSI: Komponen Lego Kotak Detail Akun (Email, Password, & Link Optional)
+ DESKRIPSI: Komponen Lego Kotak Detail Akun (Email Wajib, Password & Link
+            Tampil Otomatis Sesuai Ketersediaan di Stok).
 =========================================================================== -->
 <script setup lang="ts">
 defineProps<{
@@ -100,8 +101,11 @@ async function copyText(label: string, value: string) {
         />
       </div>
 
-      <!-- 2. PASSWORD AKUN -->
-      <div class="p-3 rounded-lg bg-default border border-default flex items-center justify-between gap-2">
+      <!-- 2. PASSWORD AKUN (OPSIONAL: HANYA MUNCUL JIKA ADA PASSWORD DI STOK) -->
+      <div
+        v-if="deliveredAccount.password && deliveredAccount.password.trim().length > 0"
+        class="p-3 rounded-lg bg-default border border-default flex items-center justify-between gap-2"
+      >
         <div class="font-mono text-xs truncate">
           <span class="text-muted block">Password Akun:</span>
           <strong class="text-sm text-highlighted">{{ deliveredAccount.password }}</strong>
@@ -116,7 +120,7 @@ async function copyText(label: string, value: string) {
         />
       </div>
 
-      <!-- 3. LINK (OPTIONAL: HANYA MUNCUL JIKA ADA DI STOK) -->
+      <!-- 3. LINK (OPSIONAL: HANYA MUNCUL JIKA ADA LINK DI STOK) -->
       <div
         v-if="deliveredAccount.extraInfoLink"
         class="p-3 rounded-lg bg-default border border-primary/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2"

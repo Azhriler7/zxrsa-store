@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: server/services/ProductStockRepository.ts
-// DESKRIPSI: Repository OOP untuk CRUD Produk, Paket, & Penyimpanan Stok
-//            Terenkripsi (Anti-Constraint Error D1).
+// DESKRIPSI: Repository OOP untuk CRUD Produk (Prioritas Urutan Badge di Awal),
+//            Paket, & Penyimpanan Stok (Password & Link Opsional).
 // ============================================================================
 
 import type { DbProduct, DbProductVariant } from '../types/database'
@@ -20,8 +20,15 @@ export interface ProductWithVariants extends DbProduct {
 
 export class ProductStockRepository extends BaseRepository {
   public async getAllProductsWithVariants(): Promise<ProductWithVariants[]> {
+    // Produk yang memiliki promo_badge otomatis diurutkan paling awal
     const { results: products } = await this.db
-      .prepare('SELECT * FROM products ORDER BY created_at DESC')
+      .prepare(
+        `SELECT * FROM products
+         ORDER BY
+           CASE WHEN promo_badge IS NOT NULL AND TRIM(promo_badge) != '' THEN 0 ELSE 1 END ASC,
+           updated_at DESC,
+           created_at DESC`
+      )
       .all<DbProduct>()
 
     const { results: variants } = await this.db
@@ -68,6 +75,7 @@ export class ProductStockRepository extends BaseRepository {
     const autoSlug = `${baseSlug}-${productId.slice(-4)}`
 
     const defaultRules = payload.usage_rules?.trim() || 'Patuhi aturan pemakaian sesuai paket yang dipilih.'
+    const cleanBadge = payload.promo_badge?.trim() || null
 
     await this.db
       .prepare(
@@ -89,7 +97,7 @@ export class ProductStockRepository extends BaseRepository {
         autoSlug,
         defaultRules,
         payload.image_url || null,
-        payload.promo_badge || null,
+        cleanBadge,
         activeInt
       )
       .run()
@@ -222,22 +230,13 @@ export class ProductStockRepository extends BaseRepository {
     await this.db.prepare('DELETE FROM product_variants WHERE id = ?1').bind(variantId).run()
   }
 
-  // --------------------------------------------------------------------------
-  // [SECTION: SIMPAN STOK BARIS 3 KOLOM (DENGAN DETEKSI FORMAT OTOMATIS)]
-  // --------------------------------------------------------------------------
   private async insertSingleEncryptedStock(
     variantId: string,
     encryptedData: string,
     hasLink: boolean
   ): Promise<void> {
-    const parser = new StockParserService()
-    const detectedFormat = parser.parseSingleDecryptedString(
-      hasLink ? 'user@mail.com|pass|https://link' : 'user@mail.com|pass'
-    ).formatType
-
     const candidateFormats = Array.from(
       new Set([
-        detectedFormat,
         hasLink ? 'three_col' : 'two_col',
         hasLink ? 'three_col_link' : 'two_col',
         'two_col'
@@ -266,9 +265,12 @@ export class ProductStockRepository extends BaseRepository {
     })
   }
 
+  // --------------------------------------------------------------------------
+  // [SECTION: BULK ADD STRUCTURED STOCKS (EMAIL WAJIB, PASSWORD & LINK OPSIONAL)]
+  // --------------------------------------------------------------------------
   public async bulkAddStructuredStocks(
     variantId: string,
-    items: { email: string, password: string, link?: string | null }[]
+    items: { email: string, password?: string | null, link?: string | null }[]
   ) {
     const config = useRuntimeConfig(this.event)
     const cryptoService = new CryptoService(config.encryptionKey)
@@ -291,7 +293,8 @@ export class ProductStockRepository extends BaseRepository {
       const cleanPass = (item.password || '').trim()
       const cleanLink = (item.link || '').trim()
 
-      if (!cleanEmail || !cleanPass) continue
+      // Hanya Email yang wajib diisi; Password dan Link bersifat opsional
+      if (!cleanEmail) continue
 
       const normalizedRawString = cleanLink
         ? `${cleanEmail}|${cleanPass}|${cleanLink}`
@@ -305,7 +308,7 @@ export class ProductStockRepository extends BaseRepository {
     if (insertedCount === 0) {
       throw createError({
         statusCode: 400,
-        statusMessage: 'Tidak ada baris akun valid (Email & Password wajib diisi).'
+        statusMessage: 'Tidak ada baris akun valid (Email wajib diisi).'
       })
     }
 

@@ -108,8 +108,16 @@ export class StorefrontRepository extends BaseRepository {
   public async getPublicCatalog(): Promise<PublicProductCatalog[]> {
     await this.releaseExpiredLocks()
 
+    // Produk yang memiliki promo_badge otomatis naik ke urutan paling awal (pertama)
     const { results: products } = await this.db
-      .prepare('SELECT * FROM products WHERE is_active = 1 ORDER BY created_at DESC')
+      .prepare(
+        `SELECT * FROM products
+         WHERE is_active = 1
+         ORDER BY
+           CASE WHEN promo_badge IS NOT NULL AND TRIM(promo_badge) != '' THEN 0 ELSE 1 END ASC,
+           updated_at DESC,
+           created_at DESC`
+      )
       .all<DbProduct>()
 
     const { results: variants } = await this.db
@@ -143,7 +151,8 @@ export class StorefrontRepository extends BaseRepository {
             duration: v.duration,
             description: v.description || null,
             usage_rules: v.usage_rules || prod.usage_rules || null,
-            tutorial_text: v.tutorial_text || null,
+            // Tutorial tidak ditampilkan di card awal homepage, hanya di Invoice Lunas & Gmail
+            tutorial_text: null,
             original_price: v.price,
             effective_price: promoActive && v.promo_price ? v.promo_price : v.price,
             is_promo_active: promoActive,
