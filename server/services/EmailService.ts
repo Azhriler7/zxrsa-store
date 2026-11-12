@@ -54,6 +54,8 @@ export class EmailService {
     const rules = esc(payload.usageRules || '-').replace(/\n/g, '<br/>')
     const tutorial = payload.tutorialText ? esc(payload.tutorialText).replace(/\n/g, '<br/>') : ''
 
+    const hasPassword = Boolean(payload.accountPassword && payload.accountPassword.trim().length > 0)
+
     const credentialBlock = payload.isCustomGmail
       ? `
         <h3 style="color:#38bdf8;margin:0 0 8px 0;font-size:15px;">Akun Custom Gmail Anda Telah Diaktifkan!</h3>
@@ -66,9 +68,13 @@ export class EmailService {
         <p style="margin:0 0 6px 0;font-size:13px;color:#f8fafc;font-family:monospace;">
           Email / Akun: <strong>${esc(payload.accountEmail || '-')}</strong>
         </p>
-        <p style="margin:0 0 6px 0;font-size:13px;color:#f8fafc;font-family:monospace;">
-          Password: <strong>${esc(payload.accountPassword || '-')}</strong>
-        </p>
+        ${
+          hasPassword
+            ? `<p style="margin:0 0 6px 0;font-size:13px;color:#f8fafc;font-family:monospace;">
+                 Password: <strong>${esc(payload.accountPassword || '')}</strong>
+               </p>`
+            : ''
+        }
         ${
           payload.accountExtraLink
             ? `<p style="margin:6px 0 0 0;font-size:13px;color:#38bdf8;font-family:monospace;">

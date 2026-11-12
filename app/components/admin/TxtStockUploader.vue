@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/admin/TxtStockUploader.vue
- DESKRIPSI: Komponen Lego Input Stok Dinamis 3 Kolom (Email, Password, Link
-            Optional) — 100% Lolos vue-tsc Typecheck.
+ DESKRIPSI: Komponen Lego Input Stok Dinamis 3 Kolom (Email Wajib, Password &
+            Link Opsional) — 100% Lolos vue-tsc Typecheck.
 =========================================================================== -->
 <script setup lang="ts">
 export interface VariantOption {
@@ -62,9 +62,10 @@ function removeRow(index: number): void {
   stockRows.value.splice(index, 1)
 }
 
+// Password & Link bersifat opsional; cukup Email yang wajib terisi
 const validRowsToSave = computed<StockInputRow[]>(() =>
   stockRows.value.filter(
-    (r: StockInputRow) => r.email.trim().length >= 3 && r.password.trim().length >= 1
+    (r: StockInputRow) => r.email.trim().length >= 3
   )
 )
 
@@ -92,11 +93,29 @@ function handleTxtFileChange(event: Event): void {
 
     stockRows.value = lines.map((line, idx) => {
       const parts = line.split('|').map(p => p.trim())
+      const emailPart = parts[0] || ''
+      let passwordPart = ''
+      let linkPart = ''
+
+      if (parts.length >= 3) {
+        passwordPart = parts[1] || ''
+        linkPart = parts.slice(2).join('|').trim()
+      } else if (parts.length === 2) {
+        const secondCol = parts[1] || ''
+        if (/^https?:\/\//i.test(secondCol)) {
+          passwordPart = ''
+          linkPart = secondCol
+        } else {
+          passwordPart = secondCol
+          linkPart = ''
+        }
+      }
+
       return {
         rowKey: `txt-${idx}-${Date.now()}`,
-        email: parts[0] || '',
-        password: parts[1] || '',
-        link: parts.slice(2).join('|') || ''
+        email: emailPart,
+        password: passwordPart,
+        link: linkPart
       }
     })
 
@@ -125,7 +144,7 @@ async function handleUploadStocks(): Promise<void> {
   if (validRowsToSave.value.length === 0) {
     toast.add({
       title: 'Data Belum Lengkap',
-      description: 'Isi minimal Email dan Password pada baris akun.',
+      description: 'Isi minimal kolom Email pada baris akun.',
       color: 'warning'
     })
     return
@@ -140,7 +159,7 @@ async function handleUploadStocks(): Promise<void> {
         variant_id: selectedVariantId.value,
         items: validRowsToSave.value.map((r: StockInputRow) => ({
           email: r.email.trim(),
-          password: r.password.trim(),
+          password: r.password.trim() || null,
           link: r.link.trim() || null
         }))
       }
@@ -282,10 +301,10 @@ async function handleConfirmRemoveSelectedStocks(): Promise<void> {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-base font-bold text-highlighted">
-              Input Stok Akun (3 Kolom: Email, Password, &amp; Link Optional)
+              Input Stok Akun (Email Wajib, Password &amp; Link Opsional)
             </h2>
             <p class="text-xs text-muted">
-              Tambah baris satu per satu atau import otomatis dari file .txt (email&#124;pw atau email &#124; pw &#124; link).
+              Tambah baris satu per satu atau import otomatis dari file .txt (email&#124;pw, email&#124;link, atau email &#124; pw &#124; link).
             </p>
           </div>
           <UBadge
@@ -340,7 +359,7 @@ async function handleConfirmRemoveSelectedStocks(): Promise<void> {
               Daftar Baris Akun ({{ stockRows.length }} Baris)
             </span>
             <span class="text-xs text-muted">
-              Kolom Link boleh dikosongkan jika tidak diperlukan
+              Kolom <strong>Password</strong> &amp; <strong>Link</strong> bersifat opsional
             </span>
           </div>
 
@@ -357,14 +376,14 @@ async function handleConfirmRemoveSelectedStocks(): Promise<void> {
               <input
                 v-model="rowItem.email"
                 type="text"
-                placeholder="Email / Username (cth: user@domain.me)"
+                placeholder="Email / Username (Wajib)"
                 class="flex-1 min-w-0 rounded-md border border-default bg-default px-2.5 py-1.5 font-mono text-xs text-highlighted focus:outline-none focus:ring-2 focus:ring-primary"
               >
 
               <input
                 v-model="rowItem.password"
                 type="text"
-                placeholder="Password Akun"
+                placeholder="Password (Opsional)"
                 class="sm:w-40 shrink-0 rounded-md border border-default bg-default px-2.5 py-1.5 font-mono text-xs text-highlighted focus:outline-none focus:ring-2 focus:ring-primary"
               >
 
@@ -421,13 +440,13 @@ async function handleConfirmRemoveSelectedStocks(): Promise<void> {
       <UCard>
         <template #header>
           <h3 class="text-sm font-bold text-highlighted">
-            Panduan Format 2 Kolom &amp; 3 Kolom
+            Panduan Format Fleksibel (Password &amp; Link Opsional)
           </h3>
         </template>
 
         <div class="space-y-3 text-xs text-muted leading-relaxed">
           <p>
-            Jika kolom <strong>Link</strong> diisi, maka di halaman Invoice &amp; Email pembeli akan otomatis muncul baris <strong>Link</strong>. Jika dikosongkan, hanya muncul Email dan Password.
+            Anda bebas mengisi <strong>Email + Password</strong>, <strong>Email + Link saja</strong> (tanpa password), atau <strong>ketiganya sekaligus</strong>.
           </p>
           <div class="p-2.5 rounded-lg bg-elevated border border-default font-mono text-[11px] space-y-1.5">
             <div class="text-highlighted font-bold">
@@ -435,6 +454,9 @@ async function handleConfirmRemoveSelectedStocks(): Promise<void> {
             </div>
             <div class="truncate">
               62vy1o0l@acqf.poj.me&#124;masuk123
+            </div>
+            <div class="truncate text-success">
+              user@ydah.me &#124; https://generator.email/ydah.me/user
             </div>
             <div class="truncate text-primary">
               ewspyvens838@ydah.me &#124; Masuk12345- &#124; https://generator.email/...

@@ -1,6 +1,6 @@
 // ============================================================================
 // FILE: server/api/admin/stocks.post.ts
-// DESKRIPSI: Endpoint API Tambah Stok (Baris 3 Kolom: Email, Password, Link)
+// DESKRIPSI: Endpoint API Tambah Stok (Email Wajib, Password & Link Opsional)
 //            & Keluarkan Stok Terpilih.
 // ============================================================================
 
@@ -15,7 +15,7 @@ const stockActionSchema = z.discriminatedUnion('action', [
       .array(
         z.object({
           email: z.string().trim().min(3, 'Email wajib diisi'),
-          password: z.string().trim().min(1, 'Password wajib diisi'),
+          password: z.string().trim().nullable().optional(),
           link: z.string().trim().nullable().optional()
         })
       )
