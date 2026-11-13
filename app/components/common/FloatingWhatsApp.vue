@@ -1,6 +1,6 @@
 <!-- ==========================================================================
  FILE: app/components/common/FloatingWhatsApp.vue
- DESKRIPSI: Komponen Lego Floating Action Button (FAB) Telepon/WhatsApp CS
+ DESKRIPSI: Tombol Bantuan WhatsApp Minimalis Bergaya Swiss Editorial
 =========================================================================== -->
 <script setup lang="ts">
 const config = useRuntimeConfig()
@@ -15,19 +15,13 @@ const whatsappUrl = computed(() => {
 
 <template>
   <div class="fixed bottom-6 right-6 z-50">
-    <UTooltip
-      text="Hubungi Admin via WhatsApp"
-      :delay-duration="0"
+    <a
+      :href="whatsappUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="inline-block px-4 py-2.5 text-[11px] font-mono font-bold uppercase tracking-[0.15em] bg-[#111827] text-[#FFFFFF] dark:bg-[#FAFAFA] dark:text-[#0A0A0A] border border-[#111827] dark:border-[#FAFAFA] hover:opacity-85 transition-opacity"
     >
-      <UButton
-        :to="whatsappUrl"
-        target="_blank"
-        color="success"
-        size="xl"
-        icon="i-lucide-phone-call"
-        label="Bantuan WA"
-        class="rounded-full shadow-xl hover:scale-105 transition-transform font-bold"
-      />
-    </UTooltip>
+      Bantuan WA
+    </a>
   </div>
 </template>

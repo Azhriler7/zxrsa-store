@@ -1,7 +1,6 @@
 <!-- ==========================================================================
  FILE: app/components/invoice/CredentialDeliverCard.vue
- DESKRIPSI: Komponen Lego Kotak Detail Akun (Email Wajib, Password & Link
-            Tampil Otomatis Sesuai Ketersediaan di Stok).
+ DESKRIPSI: Dokumen Kredensial Akun Lunas Bergaya Swiss Editorial Grid
 =========================================================================== -->
 <script setup lang="ts">
 defineProps<{
@@ -20,142 +19,135 @@ const toast = useToast()
 async function copyText(label: string, value: string) {
   await navigator.clipboard.writeText(value)
   toast.add({
-    title: `${label} Disalin!`,
+    title: `${label} Disalin`,
     description: `${value} berhasil disalin ke clipboard.`,
-    color: 'success',
-    icon: 'i-lucide-copy-check'
+    color: 'success'
   })
 }
 </script>
 
 <template>
-  <UCard class="border-2 border-success/50 bg-success/5">
-    <template #header>
-      <div class="flex items-center gap-2 text-success font-bold">
-        <UIcon
-          name="i-lucide-party-popper"
-          class="w-5 h-5"
-        />
-        <span>Pembayaran Lunas Terverifikasi!</span>
+  <div class="border border-[#111827] dark:border-[#FAFAFA] bg-[#FFFFFF] dark:bg-[#111111] divide-y divide-[#E5E7EB] dark:divide-[#262626]">
+    <!-- HEADER STATUS LUNAS -->
+    <div class="p-6 flex items-center justify-between gap-4">
+      <div>
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-[#6B7280] dark:text-[#9CA3AF] block">
+          Status Verifikasi Pembayaran
+        </span>
+        <h2 class="text-lg font-black tracking-tight text-[#111827] dark:text-[#FAFAFA] mt-0.5">
+          Pembayaran Lunas Terverifikasi.
+        </h2>
       </div>
-    </template>
-
-    <div
-      v-if="isCustomGmail"
-      class="space-y-3 text-sm"
-    >
-      <div
-        v-if="customGmailStatus === 'waiting_admin'"
-        class="p-4 rounded-lg bg-warning/10 border border-warning/30 space-y-2"
-      >
-        <div class="font-bold text-warning flex items-center gap-2">
-          <UIcon
-            name="i-lucide-hourglass"
-            class="w-5 h-5"
-          />
-          <span>Mohon Tunggu Admin Memproses Pesanan Custom Gmail Anda</span>
-        </div>
-        <p class="text-xs text-highlighted leading-relaxed">
-          Pembayaran Anda telah kami terima. Saat ini Admin sedang memproses upgrade Premium untuk akun Gmail Anda (<strong>{{ customGmailTarget }}</strong>). Begitu selesai dikonfirmasi oleh Admin, Invoice resmi akan langsung terkirim ke Gmail Anda.
-        </p>
-      </div>
-
-      <div
-        v-else
-        class="p-4 rounded-lg bg-success/10 border border-success/30 space-y-2"
-      >
-        <div class="font-bold text-success flex items-center gap-2">
-          <UIcon
-            name="i-lucide-check-check"
-            class="w-5 h-5"
-          />
-          <span>Akun Custom Gmail Anda Sudah Aktif!</span>
-        </div>
-        <p class="text-xs text-highlighted">
-          Upgrade premium untuk <strong>{{ customGmailTarget }}</strong> telah selesai dikonfirmasi oleh Admin dan dikirim ke email Anda.
-        </p>
-      </div>
+      <span class="px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-widest bg-[#111827] text-[#FFFFFF] dark:bg-[#FAFAFA] dark:text-[#0A0A0A]">
+        Delivered
+      </span>
     </div>
 
+    <!-- JIKA PAKET CUSTOM GMAIL -->
+    <div
+      v-if="isCustomGmail"
+      class="p-6 space-y-2 text-xs leading-relaxed"
+    >
+      <template v-if="customGmailStatus === 'waiting_admin'">
+        <div class="font-mono text-xs font-bold uppercase tracking-wider text-[#111827] dark:text-[#FAFAFA]">
+          Menunggu Aktivasi Manual Administrator
+        </div>
+        <p class="text-[#4B5563] dark:text-[#A3A3A3]">
+          Pembayaran telah diterima. Saat ini Administrator sedang mengaktifkan paket pada akun Gmail Anda (<strong class="font-mono text-[#111827] dark:text-[#FAFAFA]">{{ customGmailTarget }}</strong>). Notifikasi selesai akan dikirimkan otomatis ke Gmail Anda.
+        </p>
+      </template>
+      <template v-else>
+        <div class="font-mono text-xs font-bold uppercase tracking-wider text-[#111827] dark:text-[#FAFAFA]">
+          Akun Custom Gmail Telah Aktif
+        </div>
+        <p class="text-[#4B5563] dark:text-[#A3A3A3]">
+          Aktivasi premium untuk <strong class="font-mono text-[#111827] dark:text-[#FAFAFA]">{{ customGmailTarget }}</strong> telah selesai dikonfirmasi dan dikirim ke email Anda.
+        </p>
+      </template>
+    </div>
+
+    <!-- JIKA PAKET REGULER (EMAIL WAJIB, PASSWORD & LINK OPSIONAL) -->
     <div
       v-else-if="deliveredAccount"
-      class="space-y-3"
+      class="divide-y divide-[#E5E7EB] dark:divide-[#262626]"
     >
-      <p class="text-xs text-muted">
-        Salin kredensial akun di bawah ini (juga telah dikirim otomatis ke Gmail Anda):
-      </p>
-
       <!-- 1. EMAIL / USERNAME -->
-      <div class="p-3 rounded-lg bg-default border border-default flex items-center justify-between gap-2">
-        <div class="font-mono text-xs truncate">
-          <span class="text-muted block">Email / Username:</span>
-          <strong class="text-sm text-highlighted">{{ deliveredAccount.email }}</strong>
+      <div class="p-5 flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-[#6B7280] dark:text-[#737373] block">
+            Email / Username
+          </span>
+          <strong class="font-mono text-sm text-[#111827] dark:text-[#FAFAFA] block truncate mt-0.5">
+            {{ deliveredAccount.email }}
+          </strong>
         </div>
-        <UButton
-          size="xs"
-          color="primary"
-          variant="subtle"
-          icon="i-lucide-copy"
-          label="Salin Email"
+        <button
+          type="button"
+          class="px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider border border-[#E5E7EB] dark:border-[#262626] hover:border-[#111827] dark:hover:border-[#FAFAFA] text-[#111827] dark:text-[#FAFAFA] shrink-0 cursor-pointer"
           @click="copyText('Email', deliveredAccount.email)"
-        />
+        >
+          Salin Email
+        </button>
       </div>
 
-      <!-- 2. PASSWORD AKUN (OPSIONAL: HANYA MUNCUL JIKA ADA PASSWORD DI STOK) -->
+      <!-- 2. PASSWORD AKUN (HANYA MUNCUL JIKA ADA PASSWORD) -->
       <div
         v-if="deliveredAccount.password && deliveredAccount.password.trim().length > 0"
-        class="p-3 rounded-lg bg-default border border-default flex items-center justify-between gap-2"
+        class="p-5 flex items-center justify-between gap-4"
       >
-        <div class="font-mono text-xs truncate">
-          <span class="text-muted block">Password Akun:</span>
-          <strong class="text-sm text-highlighted">{{ deliveredAccount.password }}</strong>
+        <div class="min-w-0">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-[#6B7280] dark:text-[#737373] block">
+            Kata Sandi / Password
+          </span>
+          <strong class="font-mono text-sm text-[#111827] dark:text-[#FAFAFA] block truncate mt-0.5">
+            {{ deliveredAccount.password }}
+          </strong>
         </div>
-        <UButton
-          size="xs"
-          color="primary"
-          variant="subtle"
-          icon="i-lucide-copy"
-          label="Salin Sandi"
+        <button
+          type="button"
+          class="px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider border border-[#E5E7EB] dark:border-[#262626] hover:border-[#111827] dark:hover:border-[#FAFAFA] text-[#111827] dark:text-[#FAFAFA] shrink-0 cursor-pointer"
           @click="copyText('Password', deliveredAccount.password)"
-        />
+        >
+          Salin Sandi
+        </button>
       </div>
 
-      <!-- 3. LINK (OPSIONAL: HANYA MUNCUL JIKA ADA LINK DI STOK) -->
+      <!-- 3. LINK GENERATOR / AKSES (HANYA MUNCUL JIKA ADA LINK) -->
       <div
         v-if="deliveredAccount.extraInfoLink"
-        class="p-3 rounded-lg bg-default border border-primary/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+        class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
-        <div class="font-mono text-xs min-w-0">
-          <span class="text-muted block">Link:</span>
+        <div class="min-w-0">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-[#6B7280] dark:text-[#737373] block">
+            Tautan Akses / Link
+          </span>
           <a
             :href="deliveredAccount.extraInfoLink"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-sm font-bold text-primary underline break-all"
+            class="font-mono text-xs font-bold text-[#111827] dark:text-[#FAFAFA] underline underline-offset-4 break-all block mt-0.5"
           >
             {{ deliveredAccount.extraInfoLink }}
           </a>
         </div>
-        <div class="flex items-center gap-1.5 shrink-0">
-          <UButton
-            size="xs"
-            color="neutral"
-            variant="subtle"
-            icon="i-lucide-copy"
-            label="Salin Link"
+        <div class="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            class="px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider border border-[#E5E7EB] dark:border-[#262626] hover:border-[#111827] dark:hover:border-[#FAFAFA] text-[#111827] dark:text-[#FAFAFA] cursor-pointer"
             @click="copyText('Link', deliveredAccount.extraInfoLink)"
-          />
-          <UButton
-            size="xs"
-            color="primary"
-            variant="solid"
-            icon="i-lucide-external-link"
-            label="Buka Link"
-            :to="deliveredAccount.extraInfoLink"
+          >
+            Salin Link
+          </button>
+          <a
+            :href="deliveredAccount.extraInfoLink"
             target="_blank"
-          />
+            rel="noopener noreferrer"
+            class="px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider bg-[#111827] text-[#FFFFFF] dark:bg-[#FAFAFA] dark:text-[#0A0A0A]"
+          >
+            Buka Link
+          </a>
         </div>
       </div>
     </div>
-  </UCard>
+  </div>
 </template>

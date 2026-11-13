@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/PackageSelectorSection.vue
- DESKRIPSI: Komponen Lego Pilih Paket Vertical-Linear (Tanpa Menampilkan
-            Ketentuan Pemakaian di Homepage — Hanya Muncul Setelah Lunas & Gmail).
+ DESKRIPSI: Katalog & Konfigurasi Paket Bergaya Editorial Minimalis / Swiss Grid
+            (Fokus Visual Produk Besar, Garis 1px Solid, Tanpa Drop-Shadow).
 =========================================================================== -->
 <script setup lang="ts">
 import { z } from 'zod'
@@ -31,6 +31,15 @@ const currentProduct = computed(() =>
   props.catalog.find(p => p.id === selectedProductId.value) || props.catalog[0] || null
 )
 
+function getStartingPrice(prod: PublicProductCatalog): number {
+  if (!prod.variants.length) return 0
+  return Math.min(...prod.variants.map(v => v.effective_price))
+}
+
+function getTotalAvailableStock(prod: PublicProductCatalog): number {
+  return prod.variants.reduce((acc, v) => acc + (v.available_stock || 0), 0)
+}
+
 function selectProduct(prodId: string) {
   selectedProductId.value = prodId
   selectedVariant.value = null
@@ -41,8 +50,7 @@ function selectVariantRow(variant: PublicVariantItem) {
     toast.add({
       title: 'Stok Sedang Kosong',
       description: 'Maaf, stok untuk paket ini sedang habis. Silakan pilih varian paket lainnya.',
-      color: 'warning',
-      icon: 'i-lucide-package-x'
+      color: 'warning'
     })
     return
   }
@@ -106,8 +114,7 @@ async function handleProceedToPayment() {
     toast.add({
       title: 'Invoice QRIS Berhasil Dibuat!',
       description: 'Mengalihkan Anda ke halaman pembayaran...',
-      color: 'success',
-      icon: 'i-lucide-qr-code'
+      color: 'success'
     })
 
     await navigateTo(`/invoice/${res.invoiceToken}`)
@@ -127,268 +134,280 @@ function formatRupiah(val: number) {
 <template>
   <section
     id="pilih-paket"
-    class="scroll-mt-20 py-16 sm:py-20"
+    class="scroll-mt-14 w-full bg-[#FAFAFA] dark:bg-[#0A0A0A] border-b border-[#E5E7EB] dark:border-[#262626] py-16 sm:py-24"
   >
-    <UContainer class="max-w-3xl space-y-10">
-      <div class="text-center space-y-2.5">
-        <UBadge
-          color="primary"
-          variant="subtle"
-          size="sm"
-          class="uppercase tracking-wider font-bold"
-        >
-          Konfigurasi Pesanan Instan
-        </UBadge>
-        <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-highlighted">
-          Pilih Aplikasi &amp; Paket Langganan
-        </h2>
-        <p class="text-xs sm:text-sm text-muted max-w-xl mx-auto">
-          Ikuti langkah berurutan di bawah ini untuk memesan akun premium secara otomatis.
+    <div class="max-w-7xl mx-auto px-4 sm:px-8 space-y-16">
+      <!-- HEADER KATALOG EDITORIAL -->
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#E5E7EB] dark:border-[#262626] pb-6">
+        <div class="space-y-2">
+          <span class="font-mono text-xs uppercase tracking-[0.2em] text-[#6B7280] dark:text-[#737373] block">
+            01 / Indeks Katalog &amp; Konfigurasi Lisensi
+          </span>
+          <h2 class="text-3xl sm:text-4xl font-black tracking-[-0.04em] text-[#111827] dark:text-[#FAFAFA]">
+            Katalog Aplikasi Digital.
+          </h2>
+        </div>
+        <p class="text-xs font-mono uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">
+          {{ catalog.length }} Produk Aktif
         </p>
       </div>
 
-      <UCard
+      <div
         v-if="!catalog.length"
-        class="text-center py-10"
+        class="p-12 border border-[#E5E7EB] dark:border-[#262626] bg-[#FFFFFF] dark:bg-[#111111] text-center text-xs font-mono uppercase tracking-widest text-[#6B7280]"
       >
-        <p class="text-sm text-muted">
-          Katalog aplikasi sedang diperbarui oleh Administrator. Silakan kembali beberapa saat lagi.
-        </p>
-      </UCard>
+        Katalog sedang diperbarui oleh Administrator.
+      </div>
 
       <div
         v-else
-        class="space-y-8"
+        class="space-y-16"
       >
-        <!-- LANGKAH 1: PILIH APLIKASI -->
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold uppercase tracking-wider text-muted">
-              Langkah 1 — Pilih Aplikasi Premium
-            </span>
-            <span class="text-xs text-muted">
-              {{ catalog.length }} Aplikasi Tersedia
-            </span>
-          </div>
-
-          <div class="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none [&::-webkit-scrollbar]:hidden">
-            <button
-              v-for="prod in catalog"
-              :key="prod.id"
-              type="button"
-              class="flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all cursor-pointer shrink-0 focus:outline-none"
+        <!-- BAGIAN 1: GRID VISUAL PRODUK BESAR & BERSIH TANPA BINGKAI TEBAL -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <article
+            v-for="prod in catalog"
+            :key="prod.id"
+            class="group cursor-pointer flex flex-col justify-between space-y-4 focus:outline-none"
+            @click="selectProduct(prod.id)"
+          >
+            <!-- KANVAS VISUAL PRODUK BESAR -->
+            <div
+              class="relative aspect-square w-full bg-[#FFFFFF] dark:bg-[#111111] border transition-colors flex items-center justify-center p-10"
               :class="
                 selectedProductId === prod.id
-                  ? 'border-primary bg-primary/10 text-highlighted ring-2 ring-primary/30 shadow-xs'
-                  : 'border-default bg-elevated/40 text-muted hover:text-highlighted hover:border-primary/40'
+                  ? 'border-[#111827] dark:border-[#FAFAFA]'
+                  : 'border-[#E5E7EB] dark:border-[#262626] group-hover:border-[#9CA3AF] dark:group-hover:border-[#525252]'
               "
-              @click="selectProduct(prod.id)"
             >
+              <!-- BADGE EDITORIAL POJOK KIRI ATAS -->
+              <span
+                v-if="prod.promo_badge"
+                class="absolute top-3 left-3 px-2.5 py-1 text-[10px] font-mono font-bold uppercase tracking-widest bg-[#111827] text-[#FFFFFF] dark:bg-[#FAFAFA] dark:text-[#0A0A0A]"
+              >
+                {{ prod.promo_badge }}
+              </span>
+
+              <!-- INDIKATOR TERPILIH POJOK KANAN ATAS -->
+              <span
+                v-if="selectedProductId === prod.id"
+                class="absolute top-3 right-3 px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest border border-[#111827] dark:border-[#FAFAFA] text-[#111827] dark:text-[#FAFAFA]"
+              >
+                Aktif
+              </span>
+
               <CommonAppIconImage
                 :src="prod.image_url"
                 :alt="prod.name"
-                size-class="w-9 h-9"
-                rounded-class="rounded-lg"
+                size-class="w-24 h-24 sm:w-28 sm:h-28 transition-transform duration-300 group-hover:scale-105"
+                rounded-class="rounded-2xl"
               />
+            </div>
 
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-sm text-highlighted">{{ prod.name }}</span>
-                  <UBadge
-                    v-if="prod.promo_badge"
-                    color="warning"
-                    size="xs"
-                    variant="solid"
-                  >
-                    {{ prod.promo_badge }}
-                  </UBadge>
-                </div>
-                <span class="text-[11px] text-muted block">
-                  {{ prod.variants.length }} Pilihan Paket
+            <!-- NAMA PRODUK, HARGA, & TOMBOL AKSI MINIMALIS DI BAWAH GAMBAR -->
+            <div class="space-y-3 pt-1">
+              <div class="flex items-baseline justify-between gap-2">
+                <h3 class="text-base font-bold tracking-[-0.02em] text-[#111827] dark:text-[#FAFAFA]">
+                  {{ prod.name }}
+                </h3>
+                <span class="font-mono text-xs text-[#6B7280] dark:text-[#9CA3AF]">
+                  {{ prod.variants.length }} Paket
                 </span>
               </div>
-            </button>
-          </div>
+
+              <div class="flex items-baseline justify-between border-t border-[#E5E7EB] dark:border-[#262626] pt-2.5 text-xs">
+                <span class="text-[#6B7280] dark:text-[#737373] font-mono uppercase text-[10px] tracking-wider">
+                  Mulai Dari
+                </span>
+                <span class="font-mono font-bold text-sm text-[#111827] dark:text-[#FAFAFA]">
+                  {{ formatRupiah(getStartingPrice(prod)) }}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                class="w-full py-2.5 text-xs font-bold uppercase tracking-widest border transition-colors cursor-pointer"
+                :class="
+                  selectedProductId === prod.id
+                    ? 'bg-[#111827] text-[#FFFFFF] border-[#111827] dark:bg-[#FAFAFA] dark:text-[#0A0A0A] dark:border-[#FAFAFA]'
+                    : 'bg-transparent text-[#111827] dark:text-[#FAFAFA] border-[#E5E7EB] dark:border-[#262626] group-hover:border-[#111827] dark:group-hover:border-[#FAFAFA]'
+                "
+              >
+                {{ selectedProductId === prod.id ? 'Produk Terpilih' : `Pilih Paket (${getTotalAvailableStock(prod)} Stok)` }}
+              </button>
+            </div>
+          </article>
         </div>
 
-        <!-- LANGKAH 2: VERTICAL-LINEAR PACKAGE LIST -->
+        <!-- BAGIAN 2 & 3: SWISS GRID SPLIT (KIRI: DAFTAR VARIAN PAKET, KANAN: CHECKOUT) -->
         <div
           v-if="currentProduct"
-          class="space-y-3"
+          class="grid grid-cols-1 lg:grid-cols-12 border-t border-[#E5E7EB] dark:border-[#262626] pt-12 gap-12"
         >
-          <span class="text-xs font-bold uppercase tracking-wider text-muted block">
-            Langkah 2 — Pilih Durasi &amp; Varian Paket ({{ currentProduct.name }})
-          </span>
+          <!-- KOLOM KIRI (7 KOLOM): PILIHAN VARIAN PAKET -->
+          <div class="lg:col-span-7 space-y-6">
+            <div class="space-y-1">
+              <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-[#6B7280] dark:text-[#737373] block">
+                Tahap 02 — Spesifikasi Varian
+              </span>
+              <h3 class="text-2xl font-black tracking-[-0.03em] text-[#111827] dark:text-[#FAFAFA]">
+                Pilih Paket {{ currentProduct.name }}
+              </h3>
+            </div>
 
-          <div class="space-y-3">
-            <div
-              v-for="variant in currentProduct.variants"
-              :key="variant.id"
-              class="p-4 sm:p-5 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-              :class="[
-                selectedVariant?.id === variant.id
-                  ? 'border-primary bg-primary/5 ring-2 ring-primary shadow-sm'
-                  : 'border-default bg-default hover:border-primary/50',
-                variant.available_stock <= 0 ? 'opacity-55' : ''
-              ]"
-              @click="selectVariantRow(variant)"
-            >
-              <div class="flex items-start sm:items-center gap-3.5 min-w-0">
-                <UIcon
-                  :name="selectedVariant?.id === variant.id ? 'i-lucide-circle-check-big' : 'i-lucide-circle'"
-                  class="w-5 h-5 shrink-0 mt-1 sm:mt-0 transition-colors"
-                  :class="selectedVariant?.id === variant.id ? 'text-primary' : 'text-muted'"
-                />
-
-                <CommonAppIconImage
-                  :src="currentProduct.image_url"
-                  :alt="currentProduct.name"
-                  size-class="w-10 h-10"
-                  rounded-class="rounded-xl"
-                />
-
-                <div class="min-w-0 space-y-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <h3 class="font-bold text-sm sm:text-base text-highlighted">
+            <div class="border-t border-[#E5E7EB] dark:border-[#262626] divide-y divide-[#E5E7EB] dark:divide-[#262626]">
+              <div
+                v-for="variant in currentProduct.variants"
+                :key="variant.id"
+                class="py-5 px-4 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                :class="[
+                  selectedVariant?.id === variant.id
+                    ? 'bg-[#FFFFFF] dark:bg-[#111111] border-l-2 border-l-[#111827] dark:border-l-[#FAFAFA]'
+                    : 'hover:bg-[#FFFFFF]/60 dark:hover:bg-[#111111]/60',
+                  variant.available_stock <= 0 ? 'opacity-45' : ''
+                ]"
+                @click="selectVariantRow(variant)"
+              >
+                <div class="space-y-1.5 min-w-0">
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="text-base font-bold tracking-tight text-[#111827] dark:text-[#FAFAFA]">
                       {{ variant.name }}
-                    </h3>
-                    <UBadge
-                      :color="variant.is_custom_gmail ? 'warning' : (variant.available_stock > 0 ? 'success' : 'error')"
-                      variant="subtle"
-                      size="xs"
+                    </span>
+                    <span class="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 border border-[#E5E7EB] dark:border-[#262626] text-[#4B5563] dark:text-[#A3A3A3]">
+                      {{ variant.duration }}
+                    </span>
+                    <span
+                      class="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 border"
+                      :class="
+                        variant.available_stock > 0
+                          ? 'border-[#E5E7EB] dark:border-[#262626] text-[#111827] dark:text-[#FAFAFA]'
+                          : 'border-red-500/40 text-red-600 dark:text-red-400'
+                      "
                     >
-                      {{ variant.is_custom_gmail ? 'Upgrade Gmail Pribadi' : (variant.available_stock > 0 ? `Tersedia: ${variant.available_stock} Akun` : 'Stok Habis') }}
-                    </UBadge>
-                    <UBadge
+                      {{ variant.is_custom_gmail ? 'Upgrade Gmail Pribadi' : (variant.available_stock > 0 ? `Stok: ${variant.available_stock}` : 'Habis') }}
+                    </span>
+                    <span
                       v-if="variant.is_promo_active"
-                      color="primary"
-                      variant="solid"
-                      size="xs"
+                      class="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 bg-[#111827] text-[#FFFFFF] dark:bg-[#FAFAFA] dark:text-[#0A0A0A]"
                     >
-                      PROMO AKTIF
-                    </UBadge>
+                      Promo
+                    </span>
                   </div>
 
                   <p
                     v-if="variant.description"
-                    class="text-xs text-highlighted/85 leading-relaxed"
+                    class="text-xs text-[#6B7280] dark:text-[#9CA3AF] leading-relaxed max-w-xl"
                   >
                     {{ variant.description }}
                   </p>
-
-                  <p class="text-xs text-muted flex items-center gap-1.5">
-                    <UIcon
-                      name="i-lucide-calendar-clock"
-                      class="w-3.5 h-3.5"
-                    />
-                    <span>Masa Aktif Garansi: <strong>{{ variant.duration }}</strong></span>
-                  </p>
                 </div>
-              </div>
 
-              <div class="flex sm:flex-col items-baseline sm:items-end justify-between border-t sm:border-t-0 pt-2.5 sm:pt-0 border-default shrink-0">
-                <span class="text-xs text-muted sm:hidden">Harga Paket:</span>
-                <div class="text-right">
-                  <div
+                <div class="flex sm:flex-col items-baseline sm:items-end justify-between shrink-0">
+                  <span
                     v-if="variant.is_promo_active"
-                    class="text-xs text-muted line-through font-mono"
+                    class="font-mono text-xs text-[#6B7280] line-through"
                   >
                     {{ formatRupiah(variant.original_price) }}
-                  </div>
-                  <div class="text-lg sm:text-xl font-extrabold font-mono text-primary">
+                  </span>
+                  <span class="font-mono text-lg font-extrabold text-[#111827] dark:text-[#FAFAFA]">
                     {{ formatRupiah(variant.effective_price) }}
-                  </div>
+                  </span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- LANGKAH 3: VERTICAL CHECKOUT FORM (TANPA MENAMPILKAN ATURAN/GARANSI DI AWAL) -->
-        <div
-          v-if="selectedVariant && currentProduct"
-          class="space-y-3 pt-2"
-        >
-          <span class="text-xs font-bold uppercase tracking-wider text-muted block">
-            Langkah 3 — Masukkan Alamat Gmail Penerima &amp; Buat QRIS
-          </span>
+          <!-- KOLOM KANAN (5 KOLOM): PANEL CHECKOUT SWISS GRID -->
+          <div class="lg:col-span-5">
+            <div class="border border-[#E5E7EB] dark:border-[#262626] bg-[#FFFFFF] dark:bg-[#111111] p-6 sm:p-8 space-y-6">
+              <div class="border-b border-[#E5E7EB] dark:border-[#262626] pb-4 space-y-1">
+                <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-[#6B7280] dark:text-[#737373] block">
+                  Tahap 03 — Konfigurasi Pengiriman
+                </span>
+                <h3 class="text-xl font-bold tracking-[-0.02em] text-[#111827] dark:text-[#FAFAFA]">
+                  Ringkasan &amp; Checkout
+                </h3>
+              </div>
 
-          <UCard class="border-2 border-primary/50 shadow-lg">
-            <template #header>
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center gap-2.5">
-                  <CommonAppIconImage
-                    :src="currentProduct.image_url"
-                    :alt="currentProduct.name"
-                    size-class="w-8 h-8"
-                    rounded-class="rounded-lg"
-                  />
-                  <div>
-                    <h3 class="font-bold text-sm sm:text-base text-highlighted">
-                      {{ currentProduct.name }} — {{ selectedVariant.name }}
-                    </h3>
-                    <p class="text-xs text-muted">
-                      Durasi {{ selectedVariant.duration }} • Kunci Stok 10 Menit
-                    </p>
+              <div
+                v-if="!selectedVariant"
+                class="py-12 text-center space-y-2"
+              >
+                <p class="text-xs font-mono uppercase tracking-widest text-[#6B7280] dark:text-[#737373]">
+                  Belum Ada Varian Dipilih
+                </p>
+                <p class="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
+                  Pilih salah satu baris varian paket {{ currentProduct.name }} di sebelah kiri untuk melanjutkan pemesanan.
+                </p>
+              </div>
+
+              <div
+                v-else
+                class="space-y-6"
+              >
+                <div class="space-y-2 pb-4 border-b border-[#E5E7EB] dark:border-[#262626] text-xs">
+                  <div class="flex justify-between">
+                    <span class="text-[#6B7280] dark:text-[#9CA3AF]">Aplikasi</span>
+                    <span class="font-bold text-[#111827] dark:text-[#FAFAFA]">{{ currentProduct.name }}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-[#6B7280] dark:text-[#9CA3AF]">Varian &amp; Durasi</span>
+                    <span class="font-mono text-[#111827] dark:text-[#FAFAFA]">{{ selectedVariant.name }} ({{ selectedVariant.duration }})</span>
+                  </div>
+                  <div class="flex justify-between pt-2 border-t border-[#E5E7EB] dark:border-[#262626] text-sm">
+                    <span class="font-bold text-[#111827] dark:text-[#FAFAFA]">Harga Paket</span>
+                    <span class="font-mono font-extrabold text-[#111827] dark:text-[#FAFAFA]">{{ formatRupiah(selectedVariant.effective_price) }}</span>
                   </div>
                 </div>
-                <span class="font-mono font-extrabold text-lg text-primary">
-                  {{ formatRupiah(selectedVariant.effective_price) }}
-                </span>
+
+                <UForm
+                  :schema="checkoutFormSchema"
+                  :state="formState"
+                  class="space-y-5"
+                  @submit="onFormValidatedSubmit"
+                >
+                  <UFormField
+                    label="Alamat Gmail Penerima Invoice & Akun"
+                    name="customer_email"
+                    help="Kredensial akun dan invoice resmi dikirim otomatis ke Gmail ini."
+                    required
+                  >
+                    <UInput
+                      v-model="formState.customer_email"
+                      type="email"
+                      placeholder="namaanda@gmail.com"
+                      size="lg"
+                      class="w-full font-mono"
+                    />
+                  </UFormField>
+
+                  <UFormField
+                    v-if="selectedVariant.is_custom_gmail"
+                    label="Alamat Gmail Target Upgrade (Custom Gmail)"
+                    name="custom_gmail_account"
+                    help="Masukkan alamat Gmail pribadi yang ingin diaktifkan fitur premiumnya."
+                    required
+                  >
+                    <UInput
+                      v-model="formState.custom_gmail_account"
+                      type="email"
+                      placeholder="target.premium@gmail.com"
+                      size="lg"
+                      class="w-full font-mono"
+                    />
+                  </UFormField>
+
+                  <button
+                    type="submit"
+                    :disabled="isCreatingInvoice"
+                    class="w-full py-4 px-6 text-xs font-bold uppercase tracking-[0.14em] bg-[#111827] text-[#FFFFFF] dark:bg-[#FAFAFA] dark:text-[#0A0A0A] hover:opacity-85 transition-opacity disabled:opacity-50 cursor-pointer"
+                  >
+                    {{ isCreatingInvoice ? 'Memproses Invoice...' : 'Lanjutkan Pembayaran QRIS' }}
+                  </button>
+                </UForm>
               </div>
-            </template>
-
-            <UForm
-              :schema="checkoutFormSchema"
-              :state="formState"
-              class="space-y-4"
-              @submit="onFormValidatedSubmit"
-            >
-              <UFormField
-                label="Alamat Gmail Penerima Invoice & Akun"
-                name="customer_email"
-                help="Invoice resmi, panduan, dan ketentuan garansi akan dikirim otomatis ke Gmail ini setelah pembayaran selesai."
-                required
-              >
-                <UInput
-                  v-model="formState.customer_email"
-                  type="email"
-                  placeholder="namaanda@gmail.com"
-                  icon="i-lucide-mail"
-                  size="lg"
-                  class="w-full"
-                />
-              </UFormField>
-
-              <UFormField
-                v-if="selectedVariant.is_custom_gmail"
-                label="Alamat Gmail yang Ingin Dijadikan Premium (Custom Gmail)"
-                name="custom_gmail_account"
-                help="Admin kami akan mengaktifkan fitur premium pada alamat Gmail ini setelah pembayaran lunas."
-                required
-              >
-                <UInput
-                  v-model="formState.custom_gmail_account"
-                  type="email"
-                  placeholder="akun.target.premium@gmail.com"
-                  icon="i-lucide-sparkles"
-                  size="lg"
-                  class="w-full"
-                />
-              </UFormField>
-
-              <UButton
-                type="submit"
-                color="primary"
-                size="xl"
-                block
-                icon="i-lucide-qr-code"
-                label="Lanjutkan ke Pembayaran QRIS Dinamis"
-                class="font-bold"
-                :loading="isCreatingInvoice"
-              />
-            </UForm>
-          </UCard>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -401,6 +420,6 @@ function formatRupiah(val: number) {
         :loading="isCreatingInvoice"
         @confirm="handleProceedToPayment"
       />
-    </UContainer>
+    </div>
   </section>
 </template>

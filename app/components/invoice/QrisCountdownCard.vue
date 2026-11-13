@@ -1,7 +1,6 @@
 <!-- ==========================================================================
  FILE: app/components/invoice/QrisCountdownCard.vue
- DESKRIPSI: Komponen Lego QRIS Dinamis Berukuran Besar + Timer 10 Menit Desain
-            Mencolok + Fitur Download QRIS sebagai Gambar (.PNG).
+ DESKRIPSI: Komponen QRIS Dinamis & Timer 10 Menit Bergaya Swiss Editorial Grid
 =========================================================================== -->
 <script setup lang="ts">
 import QRCode from 'qrcode'
@@ -42,7 +41,6 @@ const secondsFormatted = computed(() =>
   (remainingSeconds.value % 60).toString().padStart(2, '0')
 )
 
-// Persentase progress bar dari total 10 menit (600 detik)
 const progressPercentage = computed(() => {
   return Math.min(100, Math.max(0, Math.round((remainingSeconds.value / 600) * 100)))
 })
@@ -54,7 +52,7 @@ async function renderQrisImages() {
       width: 340,
       margin: 2,
       color: {
-        dark: '#0f172a',
+        dark: '#111827',
         light: '#ffffff'
       }
     })
@@ -101,8 +99,7 @@ function downloadQrisAsImage() {
     toast.add({
       title: 'Gambar QRIS Berhasil Diunduh!',
       description: 'Silakan buka aplikasi m-Banking / e-Wallet Anda lalu pilih menu Scan dari Galeri.',
-      color: 'success',
-      icon: 'i-lucide-download'
+      color: 'success'
     })
   } finally {
     isDownloading.value = false
@@ -111,111 +108,70 @@ function downloadQrisAsImage() {
 </script>
 
 <template>
-  <UCard class="border-2 border-primary/50 shadow-xl overflow-hidden">
-    <div class="space-y-6 text-center">
-      <!-- BANNER COUNTDOWN TIMER 10 MENIT BESAR & MENCOLOK -->
-      <div
-        class="p-4 sm:p-5 rounded-2xl border-2 transition-colors space-y-3"
-        :class="
-          remainingSeconds <= 60
-            ? 'bg-error/10 border-error/50 text-error'
-            : 'bg-warning/10 border-warning/40 text-warning'
-        "
-      >
-        <div class="flex items-center justify-center gap-2 text-xs sm:text-sm font-extrabold uppercase tracking-wider">
-          <UIcon
-            name="i-lucide-timer"
-            class="w-5 h-5 animate-bounce"
-          />
-          <span>Batas Waktu Pembayaran QRIS (10 Menit)</span>
+  <div class="border border-[#E5E7EB] dark:border-[#262626] bg-[#FFFFFF] dark:bg-[#111111] divide-y divide-[#E5E7EB] dark:divide-[#262626]">
+    <!-- BAGIAN 1: COUNTDOWN TIMER 10 MENIT SWISS EDITORIAL -->
+    <div class="p-6 sm:p-8 space-y-4">
+      <div class="flex items-center justify-between text-xs font-mono uppercase tracking-[0.15em] text-[#6B7280] dark:text-[#9CA3AF]">
+        <span>Batas Waktu Pembayaran QRIS</span>
+        <span>Durasi Kunci: 10 Menit</span>
+      </div>
+
+      <div class="flex items-baseline justify-between gap-4">
+        <div class="font-mono text-4xl sm:text-5xl font-black tracking-[-0.04em] text-[#111827] dark:text-[#FAFAFA]">
+          {{ minutesFormatted }}<span class="opacity-40">:</span>{{ secondsFormatted }}
         </div>
-
-        <!-- ANGKA DIGITAL BESAR -->
-        <div class="flex items-center justify-center gap-2 sm:gap-3 font-mono">
-          <div class="px-4 py-2.5 rounded-xl bg-default border border-default shadow-sm min-w-19">
-            <span class="text-3xl sm:text-4xl font-extrabold text-highlighted block leading-none">
-              {{ minutesFormatted }}
-            </span>
-            <span class="text-[10px] font-sans font-semibold text-muted uppercase mt-1 block">
-              Menit
-            </span>
-          </div>
-
-          <span class="text-3xl sm:text-4xl font-extrabold animate-pulse">:</span>
-
-          <div class="px-4 py-2.5 rounded-xl bg-default border border-default shadow-sm min-w-19">
-            <span class="text-3xl sm:text-4xl font-extrabold text-highlighted block leading-none">
-              {{ secondsFormatted }}
-            </span>
-            <span class="text-[10px] font-sans font-semibold text-muted uppercase mt-1 block">
-              Detik
-            </span>
-          </div>
-        </div>
-
-        <!-- PROGRESS BAR WAKTU TERSISA -->
-        <div class="w-full h-2 rounded-full bg-default overflow-hidden">
-          <div
-            class="h-full transition-all duration-1000 rounded-full"
-            :class="remainingSeconds <= 60 ? 'bg-error' : 'bg-warning'"
-            :style="{ width: `${progressPercentage}%` }"
-          />
+        <div class="text-right">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-[#6B7280] dark:text-[#737373] block">
+            Nominal Otomatis
+          </span>
+          <span class="font-mono text-2xl sm:text-3xl font-black text-[#111827] dark:text-[#FAFAFA]">
+            {{ totalAmountFormatted }}
+          </span>
         </div>
       </div>
 
-      <!-- AREA GAMBAR QRIS DINAMIS BERUKURAN BESAR -->
-      <div class="space-y-3">
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold">
-          <UIcon
-            name="i-lucide-scan-line"
-            class="w-4 h-4"
-          />
-          <span>QRIS Dinamis Resmi • Nominal Otomatis</span>
-        </div>
-
-        <div class="mx-auto w-fit p-4 sm:p-5 bg-white rounded-2xl shadow-lg border-2 border-slate-200">
-          <img
-            v-if="qrDataUrl"
-            :src="qrDataUrl"
-            alt="QRIS Dinamis ZXRSA Store"
-            class="w-64 h-64 sm:w-72 sm:h-72 object-contain mx-auto"
-          >
-          <div
-            v-else
-            class="w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center text-xs text-slate-500"
-          >
-            Membuat Kode QRIS...
-          </div>
-        </div>
-      </div>
-
-      <!-- NOMINAL TOTAL BAYAR BESAR -->
-      <div class="p-4 rounded-xl bg-elevated border border-default space-y-1">
-        <span class="text-xs text-muted block font-medium">
-          Total Nominal yang Otomatis Terbaca Saat Scan:
-        </span>
-        <div class="text-2xl sm:text-3xl font-extrabold font-mono text-primary tracking-tight">
-          {{ totalAmountFormatted }}
-        </div>
-        <p class="text-[11px] text-muted">
-          Penting: Jangan mengubah nominal di atas agar sistem memverifikasi lunas secara otomatis.
-        </p>
-      </div>
-
-      <!-- TOMBOL DOWNLOAD GAMBAR QRIS -->
-      <div class="pt-1">
-        <UButton
-          color="primary"
-          size="xl"
-          block
-          icon="i-lucide-download"
-          label="Download Gambar QRIS (.PNG)"
-          class="font-bold shadow-md"
-          :loading="isDownloading"
-          :disabled="!qrDataUrl"
-          @click="downloadQrisAsImage"
+      <!-- GARIS PROGRESS MINIMALIS 2PX -->
+      <div class="w-full h-0.5 bg-[#E5E7EB] dark:bg-[#262626] overflow-hidden">
+        <div
+          class="h-full transition-all duration-1000"
+          :class="remainingSeconds <= 60 ? 'bg-red-600 dark:bg-red-400' : 'bg-[#111827] dark:bg-[#FAFAFA]'"
+          :style="{ width: `${progressPercentage}%` }"
         />
       </div>
     </div>
-  </UCard>
+
+    <!-- BAGIAN 2: KANVAS VISUAL QRIS BERSIH -->
+    <div class="p-8 sm:p-10 flex flex-col items-center justify-center space-y-6 bg-[#FAFAFA] dark:bg-[#0A0A0A]">
+      <div class="p-5 bg-[#FFFFFF] border border-[#E5E7EB]">
+        <img
+          v-if="qrDataUrl"
+          :src="qrDataUrl"
+          alt="QRIS Dinamis ZXRSA Store"
+          class="w-64 h-64 sm:w-72 sm:h-72 object-contain mx-auto"
+        >
+        <div
+          v-else
+          class="w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center font-mono text-xs uppercase tracking-widest text-[#6B7280]"
+        >
+          Membuat Kode QRIS...
+        </div>
+      </div>
+
+      <p class="text-xs text-[#6B7280] dark:text-[#9CA3AF] text-center max-w-md leading-relaxed">
+        Pindai menggunakan aplikasi m-Banking atau E-Wallet. Pastikan nominal transfer tepat sesuai angka di atas agar terverifikasi otomatis.
+      </p>
+    </div>
+
+    <!-- BAGIAN 3: TOMBOL UNDUH MINIMALIS TANPA IKON DEKORATIF -->
+    <div class="p-6 bg-[#FFFFFF] dark:bg-[#111111]">
+      <button
+        type="button"
+        :disabled="!qrDataUrl || isDownloading"
+        class="w-full py-4 px-6 text-xs font-bold uppercase tracking-[0.14em] bg-[#111827] text-[#FFFFFF] dark:bg-[#FAFAFA] dark:text-[#0A0A0A] hover:opacity-85 transition-opacity disabled:opacity-50 cursor-pointer"
+        @click="downloadQrisAsImage"
+      >
+        {{ isDownloading ? 'Mengunduh Gambar...' : 'Download Gambar QRIS (.PNG)' }}
+      </button>
+    </div>
+  </div>
 </template>
