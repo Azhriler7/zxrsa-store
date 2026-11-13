@@ -1,29 +1,48 @@
 // ============================================================================
 // FILE: server/api/admin/invoices-status.post.ts
-// DESKRIPSI: Endpoint POST Ubah Status Invoice (lunas, pending, expired, dll)
+// DESKRIPSI: Endpoint POST Update Status Invoice, Kirim Ulang Email, & Hapus
 // ============================================================================
 
-import { z } from 'zod'
 import { AdminInvoiceRepository } from '../../services/AdminInvoiceRepository'
-
-const updateStatusSchema = z.object({
-  invoice_id: z.string().min(1, 'ID Invoice wajib diisi'),
-  status: z.enum(['lunas', 'pending', 'expired', 'dibatalkan', 'failed'])
-})
+import type { TransactionStatus } from '../../types/database'
 
 export default defineEventHandler(async (event) => {
   await requireUserSession(event)
-  const body = await readValidatedBody(event, r => updateStatusSchema.safeParse(r))
 
-  if (!body.success) {
+  const rawBody: Record<string, unknown> = (
+    await readBody<Record<string, unknown>>(event).catch((): Record<string, unknown> => ({}))
+  ) || {}
+
+  const txId = String(
+    rawBody['transaction_id']
+    || rawBody['id']
+    || rawBody['invoice_id']
+    || ''
+  ).trim()
+
+  const action = String(rawBody['action'] || 'update_status').trim()
+
+  if (!txId) {
     throw createError({
       statusCode: 400,
-      statusMessage: body.error.issues[0]?.message || 'Status invoice tidak valid.'
+      statusMessage: 'ID Transaksi wajib disertakan.'
     })
   }
 
   const repo = new AdminInvoiceRepository(event)
-  await repo.updateInvoiceStatus(body.data.invoice_id, body.data.status)
+
+  if (action === 'delete') {
+    await repo.deleteInvoice(txId)
+    return { success: true }
+  }
+
+  if (action === 'resend_email') {
+    await repo.resendInvoiceEmailById(txId)
+    return { success: true }
+  }
+
+  const newStatus = String(rawBody['status'] || 'pending').trim() as TransactionStatus
+  await repo.updateInvoiceStatus(txId, newStatus)
 
   return {
     success: true

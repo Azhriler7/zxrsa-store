@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/PackageSelectorSection.vue
- DESKRIPSI: Komponen Lego Pilih Paket Vertical-Linear (Menampilkan Deskripsi
-            Tiap Paket & Timer Kunci Stok 5 Menit).
+ DESKRIPSI: Komponen Lego Pilih Paket Vertical-Linear (Tanpa Menampilkan
+            Ketentuan Pemakaian di Homepage — Hanya Muncul Setelah Lunas & Gmail).
 =========================================================================== -->
 <script setup lang="ts">
 import { z } from 'zod'
@@ -140,7 +140,7 @@ function formatRupiah(val: number) {
           Konfigurasi Pesanan Instan
         </UBadge>
         <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-highlighted">
-          Pilih Aplikasi & Paket Langganan
+          Pilih Aplikasi &amp; Paket Langganan
         </h2>
         <p class="text-xs sm:text-sm text-muted max-w-xl mx-auto">
           Ikuti langkah berurutan di bawah ini untuk memesan akun premium secara otomatis.
@@ -211,13 +211,13 @@ function formatRupiah(val: number) {
           </div>
         </div>
 
-        <!-- LANGKAH 2: VERTICAL-LINEAR PACKAGE LIST (DENGAN DESKRIPSI TIAP PAKET) -->
+        <!-- LANGKAH 2: VERTICAL-LINEAR PACKAGE LIST -->
         <div
           v-if="currentProduct"
           class="space-y-3"
         >
           <span class="text-xs font-bold uppercase tracking-wider text-muted block">
-            Langkah 2 — Pilih Durasi & Varian Paket ({{ currentProduct.name }})
+            Langkah 2 — Pilih Durasi &amp; Varian Paket ({{ currentProduct.name }})
           </span>
 
           <div class="space-y-3">
@@ -269,7 +269,6 @@ function formatRupiah(val: number) {
                     </UBadge>
                   </div>
 
-                  <!-- DESKRIPSI KHUSUS TIAP PAKET -->
                   <p
                     v-if="variant.description"
                     class="text-xs text-highlighted/85 leading-relaxed"
@@ -305,13 +304,13 @@ function formatRupiah(val: number) {
           </div>
         </div>
 
-        <!-- LANGKAH 3: VERTICAL CHECKOUT FORM -->
+        <!-- LANGKAH 3: VERTICAL CHECKOUT FORM (TANPA MENAMPILKAN ATURAN/GARANSI DI AWAL) -->
         <div
           v-if="selectedVariant && currentProduct"
           class="space-y-3 pt-2"
         >
           <span class="text-xs font-bold uppercase tracking-wider text-muted block">
-            Langkah 3 — Masukkan Alamat Gmail Penerima & Buat QRIS
+            Langkah 3 — Masukkan Alamat Gmail Penerima &amp; Buat QRIS
           </span>
 
           <UCard class="border-2 border-primary/50 shadow-lg">
@@ -348,7 +347,7 @@ function formatRupiah(val: number) {
               <UFormField
                 label="Alamat Gmail Penerima Invoice & Akun"
                 name="customer_email"
-                help="Invoice resmi dan kredensial akun dikirim otomatis ke alamat Gmail ini."
+                help="Invoice resmi, panduan, dan ketentuan garansi akan dikirim otomatis ke Gmail ini setelah pembayaran selesai."
                 required
               >
                 <UInput
@@ -377,19 +376,6 @@ function formatRupiah(val: number) {
                   class="w-full"
                 />
               </UFormField>
-
-              <div class="p-3.5 rounded-xl bg-elevated border border-default text-xs text-muted space-y-1.5">
-                <div class="font-bold text-highlighted flex items-center gap-1.5">
-                  <UIcon
-                    name="i-lucide-shield-alert"
-                    class="w-4 h-4 text-warning shrink-0"
-                  />
-                  <span>Ketentuan Pemakaian & Garansi {{ currentProduct.name }}:</span>
-                </div>
-                <p class="whitespace-pre-line leading-relaxed">
-                  {{ currentProduct.usage_rules }}
-                </p>
-              </div>
 
               <UButton
                 type="submit"

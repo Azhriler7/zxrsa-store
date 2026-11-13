@@ -317,14 +317,34 @@ function formatRupiah(val: number) {
           </div>
         </UCard>
 
-        <UCard>
+        <!-- KARTU TUTORIAL PENGGUNAAN (HANYA MUNCUL SETELAH LUNAS) -->
+        <UCard
+          v-if="data.invoice.status === 'lunas' && data.invoice.tutorial_text"
+          class="border border-primary/40 bg-primary/5"
+        >
+          <template #header>
+            <div class="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wider">
+              <UIcon
+                name="i-lucide-book-open-check"
+                class="w-4 h-4"
+              />
+              <span>Panduan &amp; Tutorial Penggunaan Akun</span>
+            </div>
+          </template>
+          <p class="text-xs text-highlighted whitespace-pre-line leading-relaxed">
+            {{ data.invoice.tutorial_text }}
+          </p>
+        </UCard>
+
+        <!-- KARTU ATURAN PEMAKAIAN & GARANSI (HANYA MUNCUL SETELAH LUNAS) -->
+        <UCard v-if="data.invoice.status === 'lunas' && data.invoice.usage_rules">
           <template #header>
             <div class="flex items-center gap-2 text-warning font-bold text-xs uppercase tracking-wider">
               <UIcon
                 name="i-lucide-shield-alert"
                 class="w-4 h-4"
               />
-              <span>Aturan Pemakaian & Ketentuan Garansi</span>
+              <span>Aturan Pemakaian &amp; Ketentuan Garansi</span>
             </div>
           </template>
           <p class="text-xs text-muted whitespace-pre-line leading-relaxed">

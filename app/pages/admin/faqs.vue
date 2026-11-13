@@ -100,7 +100,7 @@ async function confirmDelete() {
     </div>
 
     <UCard>
-      <div class="overflow-x-auto">
+      <div class="max-h-130 overflow-y-auto space-y-3 pr-1">
         <table class="w-full text-left border-collapse text-sm">
           <thead>
             <tr class="border-b border-default text-xs text-muted uppercase">

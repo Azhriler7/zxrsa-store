@@ -1,41 +1,32 @@
 <!-- ==========================================================================
  FILE: app/components/admin/SystemLogViewer.vue
- DESKRIPSI: Komponen Lego Tabel Pemantau System Audit Logs (Keamanan & Aktivitas)
+ DESKRIPSI: Komponen Lego Tabel System Audit Log dengan Scroll View (max-h-80)
 =========================================================================== -->
 <script setup lang="ts">
 export interface SystemLogItem {
-  id: number
-  level: 'info' | 'warn' | 'error' | 'security'
+  id: number | string
+  level: string
   module: string
   message: string
-  metadata: string | null
-  ip_address: string | null
+  metadata?: string | null
   created_at: string
 }
 
 defineProps<{
   logs: SystemLogItem[]
-  loading?: boolean
 }>()
 
-const emit = defineEmits<{
-  refresh: []
-}>()
-
-function getBadgeColor(level: SystemLogItem['level']) {
-  switch (level) {
-    case 'security': return 'error'
-    case 'error': return 'error'
-    case 'warn': return 'warning'
-    default: return 'primary'
-  }
+function getBadgeColor(level: string): 'error' | 'warning' | 'info' {
+  if (level === 'error') return 'error'
+  if (level === 'warn') return 'warning'
+  return 'info'
 }
 </script>
 
 <template>
   <UCard>
     <template #header>
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <UIcon
             name="i-lucide-terminal"
@@ -43,42 +34,38 @@ function getBadgeColor(level: SystemLogItem['level']) {
           />
           <div>
             <h2 class="text-base font-bold text-highlighted">
-              System & Security Audit Logs
+              System Audit Log (Aktivitas &amp; Webhook)
             </h2>
             <p class="text-xs text-muted">
-              Rekaman otomatis aktivitas login, webhook mutasi QRIS, dan perubahan stok
+              Rekaman otomatis dalam wadah scroll view ({{ logs.length }} catatan terbaru).
             </p>
           </div>
         </div>
-
-        <UTooltip text="Muat ulang data log terbaru">
-          <UButton
-            icon="i-lucide-refresh-cw"
-            color="neutral"
-            variant="subtle"
-            size="sm"
-            label="Refresh Log"
-            :loading="loading"
-            @click="emit('refresh')"
-          />
-        </UTooltip>
+        <UBadge
+          color="neutral"
+          variant="subtle"
+          size="xs"
+          icon="i-lucide-scroll-text"
+        >
+          Scroll View
+        </UBadge>
       </div>
     </template>
 
     <div
-      v-if="logs.length === 0"
-      class="py-8 text-center text-sm text-muted"
+      v-if="!logs.length"
+      class="py-8 text-center text-xs text-muted"
     >
-      Belum ada catatan log sistem.
+      Belum ada rekaman log aktivitas sistem.
     </div>
 
     <div
       v-else
-      class="overflow-x-auto"
+      class="max-h-80 overflow-y-auto overflow-x-auto pr-1 border border-default rounded-xl"
     >
-      <table class="w-full text-left border-collapse text-sm">
-        <thead>
-          <tr class="border-b border-default text-xs text-muted uppercase">
+      <table class="w-full text-left border-collapse text-xs">
+        <thead class="sticky top-0 z-10 bg-elevated border-b border-default text-muted uppercase">
+          <tr>
             <th class="py-2.5 px-3">
               Waktu (UTC)
             </th>
@@ -91,43 +78,36 @@ function getBadgeColor(level: SystemLogItem['level']) {
             <th class="py-2.5 px-3">
               Pesan Aktivitas
             </th>
-            <th class="py-2.5 px-3">
-              IP Address
-            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-default">
           <tr
             v-for="log in logs"
             :key="log.id"
-            class="hover:bg-elevated/50"
+            class="hover:bg-elevated/40"
           >
-            <td class="py-2.5 px-3 whitespace-nowrap text-xs text-muted font-mono">
+            <td class="py-2.5 px-3 font-mono text-muted whitespace-nowrap">
               {{ log.created_at }}
             </td>
             <td class="py-2.5 px-3 whitespace-nowrap">
               <UBadge
                 :color="getBadgeColor(log.level)"
                 variant="subtle"
-                size="sm"
+                size="xs"
+                class="uppercase"
               >
-                {{ log.level.toUpperCase() }}
+                {{ log.level }}
               </UBadge>
             </td>
-            <td class="py-2.5 px-3 whitespace-nowrap font-mono text-xs font-semibold">
+            <td class="py-2.5 px-3 font-mono font-semibold text-highlighted whitespace-nowrap">
               {{ log.module }}
             </td>
             <td class="py-2.5 px-3 text-highlighted">
               <div>{{ log.message }}</div>
-              <div
+              <pre
                 v-if="log.metadata"
-                class="text-xs text-muted font-mono mt-0.5 truncate max-w-md"
-              >
-                {{ log.metadata }}
-              </div>
-            </td>
-            <td class="py-2.5 px-3 whitespace-nowrap font-mono text-xs text-muted">
-              {{ log.ip_address || '-' }}
+                class="mt-1 p-1.5 rounded bg-elevated font-mono text-[10px] text-muted overflow-x-auto max-w-md"
+              >{{ log.metadata }}</pre>
             </td>
           </tr>
         </tbody>
