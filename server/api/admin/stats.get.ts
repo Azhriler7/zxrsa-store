@@ -1,22 +1,23 @@
 // ============================================================================
 // FILE: server/api/admin/stats.get.ts
-// DESKRIPSI: Endpoint GET Statistik Dashboard & Log Sistem (Khusus Admin)
+// DESKRIPSI: Endpoint GET Statistik Dashboard, Grafik Arus Uang, & System Logs
 // ============================================================================
 
 import { AdminDashboardRepository } from '../../services/AdminDashboardRepository'
 
 export default defineEventHandler(async (event) => {
-  // Pastikan hanya Admin yang memiliki sesi valid yang bisa mengakses API ini
   await requireUserSession(event)
-
   const repo = new AdminDashboardRepository(event)
-  const [metrics, recentLogs] = await Promise.all([
-    repo.getSummaryMetrics(),
-    repo.getRecentLogs(20)
+
+  const [stats, dailyCashflow, logs] = await Promise.all([
+    repo.getSummaryStats(),
+    repo.getDailyCashflowSeries(),
+    repo.getRecentSystemLogs(100)
   ])
 
   return {
-    metrics,
-    recentLogs
+    stats,
+    dailyCashflow,
+    logs
   }
 })

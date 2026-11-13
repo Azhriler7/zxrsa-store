@@ -154,7 +154,7 @@ async function confirmDelete() {
 
       <div
         v-else
-        class="overflow-x-auto"
+        class="max-h-130 overflow-y-auto overflow-x-auto pr-1"
       >
         <table class="w-full text-left border-collapse text-sm">
           <thead>

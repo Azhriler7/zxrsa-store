@@ -292,190 +292,211 @@ function formatRupiah(val: number) {
           Belum ada varian paket di aplikasi ini. Klik "Tambah Paket" di atas.
         </div>
 
+        <!-- DAFTAR PRODUK & PAKET DALAM WADAH SCROLL VIEW -->
         <div
           v-else
-          class="overflow-x-auto"
+          class="max-h-[75vh] overflow-y-auto space-y-6 pr-1"
         >
-          <table class="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr class="border-b border-default text-xs text-muted uppercase">
-                <th class="py-2 px-3">
-                  Nama Paket
-                </th>
-                <th class="py-2 px-3">
-                  Durasi
-                </th>
-                <th class="py-2 px-3">
-                  Harga Normal
-                </th>
-                <th class="py-2 px-3">
-                  Harga Promo & Jadwal Aktif
-                </th>
-                <th class="py-2 px-3">
-                  Aturan
-                </th>
-                <th class="py-2 px-3">
-                  Tutorial
-                </th>
-                <th class="py-2 px-3">
-                  Tipe
-                </th>
-                <th class="py-2 px-3">
-                  Stok Ready
-                </th>
-                <th class="py-2 px-3 text-right">
-                  Aksi
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-default">
-              <tr
-                v-for="v in prod.variants"
-                :key="v.id"
-              >
-                <td class="py-2.5 px-3 max-w-45">
-                  <div class="font-bold text-highlighted">
-                    {{ v.name }}
-                  </div>
-                  <p
-                    v-if="v.description"
-                    class="text-xs text-muted mt-0.5 line-clamp-2"
-                  >
-                    {{ v.description }}
-                  </p>
-                </td>
-                <td class="py-2.5 px-3 text-muted whitespace-nowrap">
-                  {{ v.duration }}
-                </td>
-                <td class="py-2.5 px-3 font-mono whitespace-nowrap">
-                  {{ formatRupiah(v.price) }}
-                </td>
-                <td class="py-2.5 px-3">
-                  <div
-                    v-if="v.promo_price"
-                    class="space-y-0.5 text-xs"
-                  >
-                    <span class="font-mono font-bold text-sm text-success block">
-                      {{ formatRupiah(v.promo_price) }}
-                    </span>
-                    <span
-                      v-if="v.promo_day_of_week"
-                      class="text-primary block"
-                    >
-                      • Tiap Hari: {{ formatDayList(v.promo_day_of_week) }}
-                    </span>
-                    <span
-                      v-if="v.promo_specific_date"
-                      class="text-warning block"
-                    >
-                      • Tgl Spesifik: {{ v.promo_specific_date }}
-                    </span>
-                    <span
-                      v-if="v.promo_start_at || v.promo_end_at"
-                      class="text-muted block"
-                    >
-                      • Rentang: {{ v.promo_start_at || 'Sekarang' }} s/d {{ v.promo_end_at || 'Selamanya' }}
-                    </span>
-                    <span
-                      v-if="!v.promo_day_of_week && !v.promo_specific_date && !v.promo_start_at && !v.promo_end_at"
-                      class="text-success/80 block"
-                    >
-                      • Aktif Setiap Saat
-                    </span>
-                  </div>
-                  <span
-                    v-else
-                    class="text-xs text-muted"
-                  >OFF (Harga Normal)</span>
-                </td>
+          <UCard
+            v-for="product in data.products"
+            :key="product.id"
+          >
+            <!-- ... bagian #header produk tetap sama ... -->
 
-                <!-- KOLOM ATURAN (TEKS) -->
-                <td class="py-2.5 px-3 max-w-45">
-                  <p
-                    v-if="v.usage_rules"
-                    class="text-xs text-muted line-clamp-2 whitespace-pre-line"
-                    :title="v.usage_rules"
-                  >
-                    {{ v.usage_rules }}
-                  </p>
-                  <span
-                    v-else
-                    class="text-xs text-muted italic"
-                  >-</span>
-                </td>
+            <div
+              v-if="!product.variants.length"
+              class="py-4 text-center text-xs text-muted"
+            >
+              Belum ada varian paket di aplikasi ini. Klik "Tambah Paket" di atas.
+            </div>
 
-                <!-- KOLOM TUTORIAL (TEKS) -->
-                <td class="py-2.5 px-3 max-w-45">
-                  <p
-                    v-if="v.tutorial_text"
-                    class="text-xs text-muted line-clamp-2 whitespace-pre-line"
-                    :title="v.tutorial_text"
+            <!-- TABEL PAKET SCROLL VIEW -->
+            <div
+              v-else
+              class="max-h-72 overflow-y-auto overflow-x-auto border border-default rounded-xl"
+            >
+              <table class="w-full text-left border-collapse text-sm">
+                <thead class="sticky top-0 z-10 bg-elevated border-b border-default text-xs text-muted uppercase">
+                  <tr>
+                    <th class="py-2.5 px-3">
+                      Nama Paket
+                    </th>
+                    <th class="py-2.5 px-3">
+                      Durasi
+                    </th>
+                    <th class="py-2.5 px-3">
+                      Harga Normal
+                    </th>
+                    <th class="py-2.5 px-3">
+                      Harga Promo &amp; Jadwal Aktif
+                    </th>
+                    <th class="py-2.5 px-3">
+                      Aturan
+                    </th>
+                    <th class="py-2.5 px-3">
+                      Tutorial
+                    </th>
+                    <th class="py-2.5 px-3">
+                      Tipe
+                    </th>
+                    <th class="py-2.5 px-3">
+                      Stok Ready
+                    </th>
+                    <th class="py-2.5 px-3 text-right">
+                      Aksi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-default">
+                  <tr
+                    v-for="v in product.variants"
+                    :key="v.id"
                   >
-                    {{ v.tutorial_text }}
-                  </p>
-                  <span
-                    v-else
-                    class="text-xs text-muted italic"
-                  >-</span>
-                </td>
+                    <td class="py-2.5 px-3 max-w-45">
+                      <div class="font-bold text-highlighted">
+                        {{ v.name }}
+                      </div>
+                      <p
+                        v-if="v.description"
+                        class="text-xs text-muted mt-0.5 line-clamp-2"
+                      >
+                        {{ v.description }}
+                      </p>
+                    </td>
+                    <td class="py-2.5 px-3 text-muted whitespace-nowrap">
+                      {{ v.duration }}
+                    </td>
+                    <td class="py-2.5 px-3 font-mono whitespace-nowrap">
+                      {{ formatRupiah(v.price) }}
+                    </td>
+                    <td class="py-2.5 px-3">
+                      <div
+                        v-if="v.promo_price"
+                        class="space-y-0.5 text-xs"
+                      >
+                        <span class="font-mono font-bold text-sm text-success block">
+                          {{ formatRupiah(v.promo_price) }}
+                        </span>
+                        <span
+                          v-if="v.promo_day_of_week"
+                          class="text-primary block"
+                        >
+                          • Tiap Hari: {{ formatDayList(v.promo_day_of_week) }}
+                        </span>
+                        <span
+                          v-if="v.promo_specific_date"
+                          class="text-warning block"
+                        >
+                          • Tgl Spesifik: {{ v.promo_specific_date }}
+                        </span>
+                        <span
+                          v-if="v.promo_start_at || v.promo_end_at"
+                          class="text-muted block"
+                        >
+                          • Rentang: {{ v.promo_start_at || 'Sekarang' }} s/d {{ v.promo_end_at || 'Selamanya' }}
+                        </span>
+                        <span
+                          v-if="!v.promo_day_of_week && !v.promo_specific_date && !v.promo_start_at && !v.promo_end_at"
+                          class="text-success/80 block"
+                        >
+                          • Aktif Setiap Saat
+                        </span>
+                      </div>
+                      <span
+                        v-else
+                        class="text-xs text-muted"
+                      >OFF (Harga Normal)</span>
+                    </td>
 
-                <td class="py-2.5 px-3 whitespace-nowrap">
-                  <UBadge
-                    :color="v.is_custom_gmail ? 'warning' : 'primary'"
-                    variant="subtle"
-                    size="sm"
-                  >
-                    {{ v.is_custom_gmail ? 'Custom Gmail' : 'Stok Otomatis' }}
-                  </UBadge>
-                </td>
-                <td class="py-2.5 px-3 font-mono font-bold whitespace-nowrap">
-                  {{ v.is_custom_gmail ? '∞ Manual' : `${v.available_stock} Akun` }}
-                </td>
-                <td class="py-2.5 px-3 text-right space-x-1 whitespace-nowrap">
-                  <UButton
-                    size="xs"
-                    color="neutral"
-                    variant="ghost"
-                    icon="i-lucide-pencil"
-                    @click="openEditVariant(prod.name, v)"
-                  />
-                  <UTooltip text="Hapus Paket (Stok wajib 0)">
-                    <UButton
-                      size="xs"
-                      color="error"
-                      variant="ghost"
-                      icon="i-lucide-trash-2"
-                      @click="promptDeleteVariant(v)"
-                    />
-                  </UTooltip>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                    <!-- KOLOM ATURAN (TEKS) -->
+                    <td class="py-2.5 px-3 max-w-45">
+                      <p
+                        v-if="v.usage_rules"
+                        class="text-xs text-muted line-clamp-2 whitespace-pre-line"
+                        :title="v.usage_rules"
+                      >
+                        {{ v.usage_rules }}
+                      </p>
+                      <span
+                        v-else
+                        class="text-xs text-muted italic"
+                      >-</span>
+                    </td>
+
+                    <!-- KOLOM TUTORIAL (TEKS) -->
+                    <td class="py-2.5 px-3 max-w-45">
+                      <p
+                        v-if="v.tutorial_text"
+                        class="text-xs text-muted line-clamp-2 whitespace-pre-line"
+                        :title="v.tutorial_text"
+                      >
+                        {{ v.tutorial_text }}
+                      </p>
+                      <span
+                        v-else
+                        class="text-xs text-muted italic"
+                      >-</span>
+                    </td>
+
+                    <td class="py-2.5 px-3 whitespace-nowrap">
+                      <UBadge
+                        :color="v.is_custom_gmail ? 'warning' : 'primary'"
+                        variant="subtle"
+                        size="sm"
+                      >
+                        {{ v.is_custom_gmail ? 'Custom Gmail' : 'Stok Otomatis' }}
+                      </UBadge>
+                    </td>
+                    <td class="py-2.5 px-3 font-mono font-bold whitespace-nowrap">
+                      {{ v.is_custom_gmail ? '∞ Manual' : `${v.available_stock} Akun` }}
+                    </td>
+                    <td class="py-2.5 px-3 text-right space-x-1 whitespace-nowrap">
+                      <UButton
+                        size="xs"
+                        color="neutral"
+                        variant="ghost"
+                        icon="i-lucide-pencil"
+                        @click="openEditVariant(product.name, v)"
+                      />
+                      <UTooltip text="Hapus Paket (Stok wajib 0)">
+                        <UButton
+                          size="xs"
+                          color="error"
+                          variant="ghost"
+                          icon="i-lucide-trash-2"
+                          @click="promptDeleteVariant(v)"
+                        />
+                      </UTooltip>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </UCard>
         </div>
-      </UCard>
+
+        <AdminProductFormModal
+          v-model:open="isProductModalOpen"
+          :initial-data="selectedProduct"
+          @saved="refresh()"
+        />
+
+        <AdminVariantPromoModal
+          v-model:open="isVariantModalOpen"
+          :initial-data="selectedVariant"
+          @saved="refresh()"
+        />
+
+        <CommonConfirmDialog
+          v-model:open="isDeleteDialogOpen"
+          title="Konfirmasi Penghapusan"
+          :description="`Stok pada '${deleteTarget?.name}' sudah 0. Apakah Anda yakin ingin menghapusnya secara permanen?`"
+          confirm-label="Ya, Hapus Permanen"
+          confirm-color="error"
+          :loading="isDeleting"
+          @confirm="confirmDelete"
+        />
+      </ucard>
     </div>
-
-    <AdminProductFormModal
-      v-model:open="isProductModalOpen"
-      :initial-data="selectedProduct"
-      @saved="refresh()"
-    />
-
-    <AdminVariantPromoModal
-      v-model:open="isVariantModalOpen"
-      :initial-data="selectedVariant"
-      @saved="refresh()"
-    />
-
-    <CommonConfirmDialog
-      v-model:open="isDeleteDialogOpen"
-      title="Konfirmasi Penghapusan"
-      :description="`Stok pada '${deleteTarget?.name}' sudah 0. Apakah Anda yakin ingin menghapusnya secara permanen?`"
-      confirm-label="Ya, Hapus Permanen"
-      confirm-color="error"
-      :loading="isDeleting"
-      @confirm="confirmDelete"
-    />
   </div>
 </template>

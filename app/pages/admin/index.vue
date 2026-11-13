@@ -1,6 +1,7 @@
 <!-- ==========================================================================
  FILE: app/pages/admin/index.vue
- DESKRIPSI: Halaman Utama Dashboard Admin (Total Pendapatan & Penghasilan Bulan Ini)
+ DESKRIPSI: Halaman Utama Dashboard Admin (Kartu Ringkasan, Grafik Batang
+            Arus Uang Interaktif, & Scrollable System Audit Log).
 =========================================================================== -->
 <script setup lang="ts">
 definePageMeta({
@@ -9,18 +10,17 @@ definePageMeta({
 })
 
 useSeoMeta({
-  title: 'Dashboard Admin — ZXRSA Store',
-  robots: 'noindex, nofollow'
+  title: 'Dashboard & Arus Uang — ZXRSA Admin'
 })
 
 const { data, status, refresh } = await useFetch('/api/admin/stats')
 
-function formatRupiah(amount: number): string {
+function formatRupiah(val: number) {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     maximumFractionDigits: 0
-  }).format(amount)
+  }).format(val || 0)
 }
 </script>
 
@@ -29,67 +29,65 @@ function formatRupiah(amount: number): string {
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold text-highlighted">
-          Ringkasan Toko & Keamanan
+          Ringkasan Toko &amp; Arus Uang (Cashflow)
         </h1>
         <p class="text-sm text-muted">
-          Pantau penjualan akun aplikasi premium, penghasilan bulanan, dan aktivitas sistem.
+          Pantau pendapatan real-time, grafik arus uang harian/mingguan/bulanan/tahunan, dan log sistem.
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
-        <UButton
-          to="/admin/stocks"
-          icon="i-lucide-upload"
-          color="primary"
-          label="Upload Stok .txt"
-        />
-      </div>
+      <UButton
+        icon="i-lucide-refresh-cw"
+        color="neutral"
+        variant="subtle"
+        label="Muat Ulang Data"
+        :loading="status === 'pending'"
+        @click="refresh()"
+      />
     </div>
 
-    <!-- LEGO SECTION 1: KARTU STATISTIK -->
+    <!-- 1. EMPAT KARTU INDIKATOR OPERASIONAL CEPAT -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <AdminStatCard
-        title="Total Pendapatan"
-        :value="formatRupiah(data?.metrics.totalRevenueLunas ?? 0)"
-        :subtitle="`${data?.metrics.totalTransactionsLunas ?? 0} Total Transaksi Lunas`"
+        title="Total Pendapatan Lunas"
+        :value="formatRupiah(data?.stats?.totalRevenue || 0)"
+        :subtitle="`${data?.stats?.paidTransactionsCount || 0} Transaksi Berhasil`"
         icon="i-lucide-wallet"
         color="success"
-        tooltip-text="Akumulasi seluruh nominal transaksi berstatus LUNAS sejak toko dibuka"
       />
-
-      <AdminStatCard
-        title="Penghasilan Bulan Ini"
-        :value="formatRupiah(data?.metrics.monthlyRevenueLunas ?? 0)"
-        :subtitle="`${data?.metrics.monthlyTransactionsLunas ?? 0} Transaksi Bulan Ini`"
-        icon="i-lucide-calendar-check-2"
-        color="primary"
-        tooltip-text="Total pendapatan dari transaksi LUNAS khusus pada bulan berjalan ini"
-      />
-
-      <AdminStatCard
-        title="Antrean Custom Gmail"
-        :value="data?.metrics.waitingCustomGmailCount ?? 0"
-        subtitle="Menunggu konfirmasi admin"
-        icon="i-lucide-mail-warning"
-        color="warning"
-        tooltip-text="Pembelian paket Custom Gmail yang sudah LUNAS dan butuh diproses manual"
-      />
-
       <AdminStatCard
         title="Menunggu Pembayaran"
-        :value="data?.metrics.totalPendingTransactions ?? 0"
-        subtitle="Invoice QRIS aktif"
-        icon="i-lucide-clock"
+        :value="String(data?.stats?.pendingTransactionsCount || 0)"
+        subtitle="Invoice QRIS Aktif"
+        icon="i-lucide-qr-code"
+        color="warning"
+      />
+      <AdminStatCard
+        title="Antrean Custom Gmail"
+        :value="String(data?.stats?.waitingCustomGmailCount || 0)"
+        subtitle="Wajib Diproses Admin"
+        icon="i-lucide-mail-warning"
+        color="primary"
+      />
+      <AdminStatCard
+        title="Total Stok Akun Ready"
+        :value="`${data?.stats?.availableStocksCount || 0} Akun`"
+        subtitle="Tersedia di Database D1"
+        icon="i-lucide-package-check"
         color="neutral"
-        tooltip-text="Transaksi yang sedang mengunci stok sementara (Timer 10 menit)"
       />
     </div>
 
-    <!-- LEGO SECTION 2: TABEL AUDIT LOG SISTEM -->
-    <AdminSystemLogViewer
-      :logs="data?.recentLogs ?? []"
-      :loading="status === 'pending'"
-      @refresh="refresh()"
+    <!-- 2. DASHBOARD & GRAFIK BATANG ARUS UANG INTERAKTIF (DI ATAS LOG) -->
+    <AdminCashflowAnalyticsCard
+      :lifetime-revenue="data?.stats?.lifetimeRevenue || 0"
+      :lifetime-paid-count="data?.stats?.lifetimePaidCount || 0"
+      :today-revenue="data?.stats?.todayRevenue || 0"
+      :this-month-revenue="data?.stats?.thisMonthRevenue || 0"
+      :daily-series="data?.dailyCashflow || []"
     />
+
+    <!-- 3. SYSTEM AUDIT LOG (SCROLL VIEW CARD) -->
+    <AdminSystemLogViewer :logs="data?.logs || []" />
   </div>
 </template>

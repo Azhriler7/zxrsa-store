@@ -1,54 +1,44 @@
 <!-- ==========================================================================
  FILE: app/components/admin/StatCard.vue
- DESKRIPSI: Komponen Lego Kartu Statistik untuk Dashboard Admin
+ DESKRIPSI: Komponen Lego Kartu Statistik Dashboard Admin
 =========================================================================== -->
 <script setup lang="ts">
 defineProps<{
-  title: string
+  title?: string
+  label?: string
   value: string | number
-  subtitle: string
-  icon: string
-  tooltipText: string
-  color?: 'primary' | 'success' | 'warning' | 'error' | 'neutral'
+  subtitle?: string
+  description?: string
+  icon?: string
+  color?: 'primary' | 'success' | 'warning' | 'error' | 'info' | 'neutral'
 }>()
 </script>
 
 <template>
-  <UCard class="shadow-sm hover:shadow-md transition-shadow">
-    <div class="flex items-start justify-between">
-      <div class="space-y-1">
-        <div class="flex items-center gap-1.5">
-          <span class="text-xs font-medium text-muted uppercase tracking-wider">
-            {{ title }}
-          </span>
-          <UTooltip :text="tooltipText">
-            <UIcon
-              name="i-lucide-info"
-              class="w-3.5 h-3.5 text-muted cursor-help"
-            />
-          </UTooltip>
-        </div>
-        <div class="text-2xl font-bold text-highlighted">
+  <UCard>
+    <div class="flex items-start justify-between gap-3">
+      <div class="space-y-1 min-w-0">
+        <span class="text-xs font-semibold uppercase tracking-wider text-muted block truncate">
+          {{ title || label }}
+        </span>
+        <div class="text-xl sm:text-2xl font-extrabold font-mono text-highlighted truncate">
           {{ value }}
         </div>
-        <p class="text-xs text-muted">
-          {{ subtitle }}
+        <p
+          v-if="subtitle || description"
+          class="text-xs text-muted truncate"
+        >
+          {{ subtitle || description }}
         </p>
       </div>
 
       <div
-        class="p-3 rounded-xl"
-        :class="{
-          'bg-primary/10 text-primary': !color || color === 'primary',
-          'bg-success/10 text-success': color === 'success',
-          'bg-warning/10 text-warning': color === 'warning',
-          'bg-error/10 text-error': color === 'error',
-          'bg-elevated text-muted': color === 'neutral'
-        }"
+        v-if="icon"
+        class="p-2.5 rounded-xl bg-elevated border border-default shrink-0 flex items-center justify-center"
       >
         <UIcon
           :name="icon"
-          class="w-6 h-6"
+          class="w-5 h-5 text-primary"
         />
       </div>
     </div>

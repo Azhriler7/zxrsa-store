@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/pages/admin/custom-gmail.vue
- DESKRIPSI: Halaman Antrean Paket Custom Gmail Admin (Sinkron dengan Endpoint
-            Konfirmasi & Menampilkan Status Pengiriman Email).
+ DESKRIPSI: Halaman Antrean Paket Custom Gmail Admin (Dilengkapi Fitur Search
+            & Scroll View Card Agar Halaman Tidak Memanjang).
 =========================================================================== -->
 <script setup lang="ts">
 definePageMeta({
@@ -14,8 +14,9 @@ useSeoMeta({
 })
 
 const toast = useToast()
-const { data, refresh } = await useFetch('/api/admin/custom-gmail')
+const { data, status, refresh } = await useFetch('/api/admin/custom-gmail')
 
+const searchQuery = ref('')
 const isConfirmOpen = ref(false)
 const selectedOrder = ref<{
   id: string
@@ -25,6 +26,22 @@ const selectedOrder = ref<{
   variant_name: string
 } | null>(null)
 const isProcessing = ref(false)
+
+const filteredQueue = computed(() => {
+  const list = data.value?.queue || []
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return list
+
+  return list.filter((item) => {
+    return (
+      item.id.toLowerCase().includes(q)
+      || item.customer_email.toLowerCase().includes(q)
+      || (item.custom_gmail_account || '').toLowerCase().includes(q)
+      || item.product_name.toLowerCase().includes(q)
+      || item.variant_name.toLowerCase().includes(q)
+    )
+  })
+})
 
 function promptConfirmOrder(item: {
   id: string
@@ -93,7 +110,7 @@ async function handleConfirmCompleted() {
           Antrean Aktivasi Paket Custom Gmail
         </h1>
         <p class="text-sm text-muted">
-          Daftar pesanan paket Custom Gmail yang sudah LUNAS dan menunggu Anda aktifkan secara manual.
+          Daftar pesanan paket Custom Gmail yang sudah LUNAS dan riwayat yang telah dikonfirmasi.
         </p>
       </div>
 
@@ -102,25 +119,56 @@ async function handleConfirmCompleted() {
         color="neutral"
         variant="subtle"
         label="Muat Ulang Antrean"
+        :loading="status === 'pending'"
         @click="refresh()"
       />
     </div>
 
     <UCard>
-      <div
-        v-if="!data?.queue?.length"
-        class="py-10 text-center text-sm text-muted"
-      >
-        Tidak ada antrean paket Custom Gmail saat ini.
-      </div>
+      <template #header>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-highlighted">
+              Daftar Antrean &amp; Riwayat ({{ filteredQueue.length }})
+            </span>
+            <UBadge
+              color="neutral"
+              variant="subtle"
+              size="xs"
+              icon="i-lucide-scroll-text"
+            >
+              Scroll View
+            </UBadge>
+          </div>
+
+          <!-- FITUR SEARCH ANTREAN CUSTOM GMAIL -->
+          <div class="w-full sm:w-80">
+            <UInput
+              v-model="searchQuery"
+              icon="i-lucide-search"
+              placeholder="Cari No. Invoice, Gmail, atau Paket..."
+              size="sm"
+              class="w-full"
+            />
+          </div>
+        </div>
+      </template>
 
       <div
+        v-if="!filteredQueue.length"
+        class="py-10 text-center text-sm text-muted"
+      >
+        {{ searchQuery ? 'Tidak ada antrean yang cocok dengan pencarian Anda.' : 'Tidak ada antrean paket Custom Gmail saat ini.' }}
+      </div>
+
+      <!-- SCROLL VIEW CONTAINER AGAR HALAMAN TIDAK MEMANJANG -->
+      <div
         v-else
-        class="overflow-x-auto"
+        class="max-h-130 overflow-y-auto overflow-x-auto pr-1 border border-default rounded-xl"
       >
         <table class="w-full text-left border-collapse text-sm">
-          <thead>
-            <tr class="border-b border-default text-xs text-muted uppercase">
+          <thead class="sticky top-0 z-10 bg-elevated border-b border-default text-xs text-muted uppercase">
+            <tr>
               <th class="py-2.5 px-3">
                 No. Invoice
               </th>
@@ -143,10 +191,11 @@ async function handleConfirmCompleted() {
           </thead>
           <tbody class="divide-y divide-default">
             <tr
-              v-for="item in data.queue"
+              v-for="item in filteredQueue"
               :key="item.id"
+              class="hover:bg-elevated/40"
             >
-              <td class="py-3 px-3 font-mono font-bold text-highlighted">
+              <td class="py-3 px-3 font-mono font-bold text-highlighted whitespace-nowrap">
                 {{ item.id }}
               </td>
               <td class="py-3 px-3">
@@ -165,7 +214,7 @@ async function handleConfirmCompleted() {
               <td class="py-3 px-3 font-mono text-xs text-muted">
                 {{ item.customer_email }}
               </td>
-              <td class="py-3 px-3">
+              <td class="py-3 px-3 whitespace-nowrap">
                 <UBadge
                   :color="item.custom_gmail_status === 'completed' ? 'success' : 'warning'"
                   variant="subtle"
@@ -174,7 +223,7 @@ async function handleConfirmCompleted() {
                   {{ item.custom_gmail_status === 'completed' ? 'Selesai Dikonfirmasi' : 'Menunggu Admin' }}
                 </UBadge>
               </td>
-              <td class="py-3 px-3 text-right">
+              <td class="py-3 px-3 text-right whitespace-nowrap">
                 <UButton
                   v-if="item.custom_gmail_status !== 'completed'"
                   size="xs"
