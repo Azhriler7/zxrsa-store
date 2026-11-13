@@ -1,104 +1,154 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/HeroSection.vue
- DESKRIPSI: Hero Section Modern SaaS Tech Aesthetic (Strictly Vertical-Linear
-            Flow, No Bento Grid, 100% Responsif Desktop & Mobile).
+ DESKRIPSI: Hero Section Split-Screen Asimetris & Bento Grid (Swiss Editorial)
 =========================================================================== -->
 <script setup lang="ts">
-const linearSteps = [
-  {
-    step: '01',
-    title: 'Pilih Aplikasi & Paket',
-    desc: 'Klik aplikasi premium dan durasi langganan sesuai kebutuhan Anda.'
-  },
-  {
-    step: '02',
-    title: 'Scan QRIS Dinamis',
-    desc: 'Nominal dan kode unik otomatis terisi tanpa perlu ketik manual.'
-  },
-  {
-    step: '03',
-    title: 'Akun Terkirim Instan',
-    desc: 'Detik itu juga tampil di layar Invoice dan masuk ke Gmail Anda.'
-  }
-]
+import type { PublicProductCatalog } from '~~/server/services/StorefrontRepository'
+
+defineProps<{
+  catalog?: PublicProductCatalog[]
+}>()
 </script>
 
 <template>
-  <section
-    id="beranda"
-    class="relative overflow-hidden pt-12 pb-16 sm:pt-20 sm:pb-24 border-b border-default"
-  >
-    <!-- SUBTLE SAAS RADIAL GLOW BACKGROUND -->
-    <div
-      class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-linear-to-b from-primary/10 via-primary/5 to-transparent"
-      aria-hidden="true"
-    />
+  <section class="w-full bg-[#FAFAFA] dark:bg-[#0A0A0A] border-b border-[#E5E7EB] dark:border-[#262626]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-8 py-16 sm:py-24 lg:py-28">
+      <!-- SPLIT-SCREEN ASIMETRIS (KIRI: TIPOGRAFI BESAR, KANAN: BENTO VISUAL PRODUK) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-stretch">
+        <!-- KOLOM KIRI (7 KOLOM): TIPOGRAFI EDITORIAL BESAR -->
+        <div class="lg:col-span-7 flex flex-col justify-between space-y-10 pr-0 lg:pr-8">
+          <div class="space-y-6">
+            <div class="inline-block border border-[#E5E7EB] dark:border-[#262626] bg-[#FFFFFF] dark:bg-[#111111] px-3 py-1">
+              <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-[#4B5563] dark:text-[#A3A3A3]">
+                Edisi Katalog 2026 — Pengiriman Otomatis 24/7
+              </span>
+            </div>
 
-    <!-- STRICTLY VERTICAL-LINEAR CONTAINER -->
-    <UContainer class="max-w-3xl text-center space-y-8">
-      <!-- STATUS PILL -->
-      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-semibold">
-        <span class="w-2 h-2 rounded-full bg-success animate-ping" />
-        <span>Sistem Pengiriman Otomatis Aktif 24/7 • Enkripsi AES-256-GCM</span>
-      </div>
+            <h1 class="text-4xl sm:text-6xl lg:text-[64px] font-black tracking-[-0.045em] leading-[1.02] text-[#111827] dark:text-[#FAFAFA]">
+              Akses Lisensi &amp; Aplikasi Digital Tanpa Kompromi.
+            </h1>
 
-      <!-- HEADLINE & SUBHEADLINE -->
-      <div class="space-y-4">
-        <h1 class="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-highlighted leading-[1.12]">
-          Infrastruktur Instan untuk
-          <span class="text-primary block sm:inline">Akun Aplikasi Premium</span>
-        </h1>
+            <p class="text-base sm:text-lg text-[#4B5563] dark:text-[#9CA3AF] max-w-xl leading-relaxed font-normal">
+              Distribusi akun premium terkurasi dengan sistem verifikasi QRIS Dinamis otomatis. Kredensial dikirim seketika ke layar dan email Anda dalam hitungan detik setelah pembayaran.
+            </p>
+          </div>
 
-        <p class="text-sm sm:text-base lg:text-lg text-muted max-w-2xl mx-auto leading-relaxed">
-          Platform penyedia akun premium bergaransi resmi dengan verifikasi pembayaran
-          <strong class="text-highlighted font-semibold">QRIS Dinamis Otomatis</strong>.
-          Tanpa antre chat manual, kredensial akun langsung dikirim ke layar dan Gmail Anda dalam hitungan detik.
-        </p>
-      </div>
+          <div class="space-y-8 pt-2">
+            <!-- TOMBOL AKSI MINIMALIS TANPA IKON DEKORATIF -->
+            <div class="flex flex-wrap items-center gap-4">
+              <a
+                href="#pilih-paket"
+                class="px-7 py-4 text-xs sm:text-sm font-bold uppercase tracking-[0.12em] bg-[#111827] text-[#FFFFFF] dark:bg-[#FAFAFA] dark:text-[#0A0A0A] hover:opacity-85 transition-opacity"
+              >
+                Eksplorasi Katalog
+              </a>
+              <a
+                href="#testimoni"
+                class="px-7 py-4 text-xs sm:text-sm font-semibold uppercase tracking-[0.12em] bg-[#FFFFFF] dark:bg-[#111111] text-[#111827] dark:text-[#FAFAFA] border border-[#E5E7EB] dark:border-[#262626] hover:border-[#111827] dark:hover:border-[#FAFAFA] transition-colors"
+              >
+                Arsip Ulasan
+              </a>
+            </div>
 
-      <!-- PRIMARY & SECONDARY CTA -->
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-        <UButton
-          href="#pilih-paket"
-          color="primary"
-          size="xl"
-          icon="i-lucide-arrow-down-right"
-          label="Mulai Pilih Paket Sekarang"
-          class="w-full sm:w-auto justify-center font-bold px-8 shadow-md"
-        />
-        <UButton
-          href="#testimoni"
-          color="neutral"
-          variant="subtle"
-          size="xl"
-          icon="i-lucide-shield-check"
-          label="Lihat Ulasan Terverifikasi"
-          class="w-full sm:w-auto justify-center font-semibold"
-        />
-      </div>
+            <!-- METRIK SWISS GRID -->
+            <div class="grid grid-cols-3 border-t border-[#E5E7EB] dark:border-[#262626] pt-6 gap-6">
+              <div>
+                <span class="block font-mono text-2xl sm:text-3xl font-bold tracking-tight text-[#111827] dark:text-[#FAFAFA]">
+                  &lt; 3 dtk
+                </span>
+                <span class="block text-[11px] font-mono uppercase tracking-wider text-[#6B7280] dark:text-[#737373] mt-1">
+                  Pengiriman Instan
+                </span>
+              </div>
+              <div class="border-l border-[#E5E7EB] dark:border-[#262626] pl-6">
+                <span class="block font-mono text-2xl sm:text-3xl font-bold tracking-tight text-[#111827] dark:text-[#FAFAFA]">
+                  AES-256
+                </span>
+                <span class="block text-[11px] font-mono uppercase tracking-wider text-[#6B7280] dark:text-[#737373] mt-1">
+                  Stok Terenkripsi
+                </span>
+              </div>
+              <div class="border-l border-[#E5E7EB] dark:border-[#262626] pl-6">
+                <span class="block font-mono text-2xl sm:text-3xl font-bold tracking-tight text-[#111827] dark:text-[#FAFAFA]">
+                  100%
+                </span>
+                <span class="block text-[11px] font-mono uppercase tracking-wider text-[#6B7280] dark:text-[#737373] mt-1">
+                  Garansi Durasi
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <!-- LINEAR 3-STEP WORKFLOW STRIP (NO BENTO GRID) -->
-      <div class="pt-8 border-t border-default">
-        <div class="flex flex-col sm:flex-row items-stretch justify-between gap-6 text-left">
-          <div
-            v-for="item in linearSteps"
-            :key="item.step"
-            class="flex-1 flex items-start gap-3.5"
-          >
-            <span class="font-mono text-xs font-extrabold px-2.5 py-1 rounded-md bg-elevated border border-default text-primary shrink-0">
-              {{ item.step }}
+        <!-- KOLOM KANAN (5 KOLOM): VISUAL PRODUK BENTO GRID BERSIH -->
+        <div class="lg:col-span-5 grid grid-cols-2 grid-rows-2 border border-[#E5E7EB] dark:border-[#262626] bg-[#FFFFFF] dark:bg-[#111111]">
+          <!-- BENTO CELL 1 (SPAN 2 KOLOM ATAS): VISUAL PRODUK UTAMA -->
+          <div class="col-span-2 p-6 sm:p-8 border-b border-[#E5E7EB] dark:border-[#262626] flex flex-col justify-between gap-6">
+            <div class="flex items-start justify-between gap-4">
+              <div class="space-y-1">
+                <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-[#6B7280] dark:text-[#737373] block">
+                  01 / Produk Unggulan
+                </span>
+                <h2 class="text-xl font-bold tracking-[-0.03em] text-[#111827] dark:text-[#FAFAFA]">
+                  Suite Kreatif &amp; Produktivitas
+                </h2>
+              </div>
+              <span class="font-mono text-[11px] px-2.5 py-0.5 border border-[#E5E7EB] dark:border-[#262626] text-[#111827] dark:text-[#FAFAFA]">
+                READY STOCK
+              </span>
+            </div>
+
+            <div class="flex items-center gap-5 py-2">
+              <img
+                src="/logo.png"
+                alt="ZXRSA Visual"
+                class="w-20 h-20 object-contain p-3 border border-[#E5E7EB] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#0A0A0A]"
+              >
+              <div class="space-y-1.5">
+                <p class="text-xs text-[#4B5563] dark:text-[#A3A3A3] leading-relaxed">
+                  Akses penuh fitur pro tanpa batas watermark, mendukung akun privat maupun upgrade langsung pada Gmail pribadi Anda.
+                </p>
+                <a
+                  href="#pilih-paket"
+                  class="inline-block text-xs font-bold uppercase tracking-wider text-[#111827] dark:text-[#FAFAFA] underline underline-offset-4"
+                >
+                  Lihat Spesifikasi Harga
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- BENTO CELL 2 (KIRI BAWAH): QRIS DINAMIS -->
+          <div class="p-6 border-r border-[#E5E7EB] dark:border-[#262626] flex flex-col justify-between space-y-4">
+            <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-[#6B7280] dark:text-[#737373]">
+              02 / Pembayaran
             </span>
             <div class="space-y-1">
-              <h2 class="text-sm font-bold text-highlighted">
-                {{ item.title }}
-              </h2>
-              <p class="text-xs text-muted leading-relaxed">
-                {{ item.desc }}
+              <div class="text-base font-bold tracking-tight text-[#111827] dark:text-[#FAFAFA]">
+                QRIS Dinamis Otomatis
+              </div>
+              <p class="text-xs text-[#6B7280] dark:text-[#9CA3AF] leading-relaxed">
+                Mendukung seluruh m-Banking dan E-Wallet dengan nominal terisi otomatis.
+              </p>
+            </div>
+          </div>
+
+          <!-- BENTO CELL 3 (KANAN BAWAH): PENGIRIMAN GMAIL -->
+          <div class="p-6 flex flex-col justify-between space-y-4">
+            <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-[#6B7280] dark:text-[#737373]">
+              03 / Arsip Resmi
+            </span>
+            <div class="space-y-1">
+              <div class="text-base font-bold tracking-tight text-[#111827] dark:text-[#FAFAFA]">
+                Sinkronisasi Gmail
+              </div>
+              <p class="text-xs text-[#6B7280] dark:text-[#9CA3AF] leading-relaxed">
+                Salinan kredensial, panduan login, dan garansi tersimpan permanen di email Anda.
               </p>
             </div>
           </div>
         </div>
       </div>
-    </UContainer>
+    </div>
   </section>
 </template>

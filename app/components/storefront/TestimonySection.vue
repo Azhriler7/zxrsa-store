@@ -1,179 +1,93 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/TestimonySection.vue
- DESKRIPSI: Komponen Lego Section Testimoni dengan Infinite Marquee +
-            Dukungan Geser Manual (Touch Swipe & Mouse Drag Kanan-Kiri).
+ DESKRIPSI: Ulasan Pembeli Terverifikasi dengan Variasi Ukuran Bento Grid
+            (Kompatibel 100% dengan Tipe DbTestimonial Database D1).
 =========================================================================== -->
 <script setup lang="ts">
-import { useRafFn } from '@vueuse/core'
 import type { DbTestimonial } from '~~/server/types/database'
 
-const props = defineProps<{
+defineProps<{
   testimonials: DbTestimonial[]
 }>()
 
-const viewportRef = ref<HTMLElement | null>(null)
-const isHovered = ref(false)
-const isDragging = ref(false)
-const startX = ref(0)
-const startScrollLeft = ref(0)
-
-// Akumulator pecahan piksel agar gerakan lambat tetap mulus di semua layar
-let subPixelAccumulator = 0
-
-const baseTrackItems = computed(() => {
-  const list = props.testimonials || []
-  if (list.length === 0) return []
-  if (list.length >= 4) return list
-  return [...list, ...list, ...list]
-})
-
-// Menjaga posisi scroll selalu berada di dalam lingkaran tanpa batas (Infinite Wrap)
-function normalizeInfiniteScroll(el: HTMLElement) {
-  const halfWidth = el.scrollWidth / 2
-  if (halfWidth <= 0) return
-
-  if (el.scrollLeft >= halfWidth) {
-    el.scrollLeft -= halfWidth
-  } else if (el.scrollLeft <= 0) {
-    el.scrollLeft += halfWidth
+function getBentoSpanClass(index: number): string {
+  // Variasi Bento Grid 12 Kolom: Kartu ke-1 dan ke-4 berukuran 6 kolom (lebar), lainnya 3 kolom
+  const mod = index % 4
+  if (mod === 0 || mod === 3) {
+    return 'lg:col-span-6'
   }
-}
-
-// Loop Otomatis 60fps ketika tidak sedang di-hover / digeser manual
-useRafFn(() => {
-  const el = viewportRef.value
-  if (!el || isHovered.value || isDragging.value || baseTrackItems.value.length === 0) return
-
-  subPixelAccumulator += 0.65
-  if (subPixelAccumulator >= 1) {
-    const step = Math.floor(subPixelAccumulator)
-    el.scrollLeft += step
-    subPixelAccumulator -= step
-    normalizeInfiniteScroll(el)
-  }
-})
-
-// Handler Geser Manual dengan Mouse (Desktop Drag Kanan-Kiri)
-function onMouseDown(e: MouseEvent) {
-  const el = viewportRef.value
-  if (!el) return
-  isDragging.value = true
-  startX.value = e.pageX - el.offsetLeft
-  startScrollLeft.value = el.scrollLeft
-}
-
-function onMouseMove(e: MouseEvent) {
-  const el = viewportRef.value
-  if (!isDragging.value || !el) return
-  e.preventDefault()
-  const x = e.pageX - el.offsetLeft
-  const walk = (x - startX.value) * 1.2
-  el.scrollLeft = startScrollLeft.value - walk
-  normalizeInfiniteScroll(el)
-}
-
-function stopDragging() {
-  isDragging.value = false
-}
-
-// Saat digeser dengan jari di layar sentuh (Touch Scroll Native), jaga agar tetap loop
-function onTouchScroll() {
-  const el = viewportRef.value
-  if (el) {
-    normalizeInfiniteScroll(el)
-  }
+  return 'lg:col-span-3'
 }
 </script>
 
 <template>
   <section
     id="testimoni"
-    class="scroll-mt-20 py-14 bg-elevated/40 border-y border-default overflow-hidden"
+    class="scroll-mt-14 w-full bg-[#FAFAFA] dark:bg-[#0A0A0A] border-b border-[#E5E7EB] dark:border-[#262626] py-16 sm:py-24"
   >
-    <UContainer class="space-y-8 mb-8">
-      <div class="text-center max-w-xl mx-auto space-y-2">
-        <UBadge
-          color="success"
-          variant="subtle"
-          icon="i-lucide-badge-check"
-        >
-          100% Transaksi Terverifikasi
-        </UBadge>
-        <h2 class="text-2xl sm:text-3xl font-extrabold text-highlighted">
-          Ulasan & Testimoni Pembeli
-        </h2>
-        <p class="text-xs text-muted">
-          Sentuh atau geser kartu ke kanan/kiri untuk membaca ulasan pelanggan kami.
+    <div class="max-w-7xl mx-auto px-4 sm:px-8 space-y-12">
+      <!-- HEADER SECTION EDITORIAL -->
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#E5E7EB] dark:border-[#262626] pb-6">
+        <div class="space-y-2">
+          <span class="font-mono text-xs uppercase tracking-[0.2em] text-[#6B7280] dark:text-[#737373] block">
+            02 / Arsip Transaksi Terverifikasi
+          </span>
+          <h2 class="text-3xl sm:text-4xl font-black tracking-[-0.04em] text-[#111827] dark:text-[#FAFAFA]">
+            Ulasan Pembeli Resmi.
+          </h2>
+        </div>
+        <p class="text-xs font-mono uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">
+          Total {{ testimonials.length }} Ulasan Tercatat
         </p>
       </div>
-    </UContainer>
 
-    <div
-      v-if="baseTrackItems.length === 0"
-      class="text-center text-xs text-muted py-6"
-    >
-      Belum ada ulasan yang ditampilkan.
-    </div>
+      <div
+        v-if="!testimonials.length"
+        class="p-12 border border-[#E5E7EB] dark:border-[#262626] bg-[#FFFFFF] dark:bg-[#111111] text-center text-xs font-mono uppercase tracking-widest text-[#6B7280]"
+      >
+        Belum ada ulasan yang ditampilkan.
+      </div>
 
-    <!-- VIEWPORT INFINITE MARQUEE + DRAGGABLE / SWIPEABLE -->
-    <div
-      v-else
-      ref="viewportRef"
-      class="relative w-full overflow-x-auto py-2 select-none scrollbar-none [&::-webkit-scrollbar]:hidden"
-      :class="isDragging ? 'cursor-grabbing' : 'cursor-grab'"
-      @mouseenter="isHovered = true"
-      @mouseleave="isHovered = false; stopDragging()"
-      @mousedown="onMouseDown"
-      @mousemove="onMouseMove"
-      @mouseup="stopDragging"
-      @touchstart.passive="isHovered = true"
-      @touchend.passive="isHovered = false"
-      @scroll.passive="onTouchScroll"
-    >
-      <div class="flex w-max">
-        <div
-          v-for="setIndex in 2"
-          :key="`set-${setIndex}`"
-          class="flex items-stretch gap-5 pr-5 shrink-0"
-          :aria-hidden="setIndex === 2 ? 'true' : undefined"
+      <!-- VARIASI BENTO GRID 12 KOLOM -->
+      <div
+        v-else
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-px bg-[#E5E7EB] dark:bg-[#262626] border border-[#E5E7EB] dark:border-[#262626]"
+      >
+        <article
+          v-for="(item, idx) in testimonials.slice(0, 8)"
+          :key="item.id"
+          class="bg-[#FFFFFF] dark:bg-[#111111] p-6 sm:p-8 flex flex-col justify-between space-y-6 transition-colors hover:bg-[#FAFAFA] dark:hover:bg-[#171717]"
+          :class="getBentoSpanClass(idx)"
         >
-          <UCard
-            v-for="(item, idx) in baseTrackItems"
-            :key="`${setIndex}-${item.id}-${idx}`"
-            class="w-77.5 sm:w-87.5 shrink-0 shadow-sm hover:shadow-md transition-shadow"
-          >
-            <div class="flex flex-col justify-between h-full space-y-4">
-              <div class="space-y-3">
-                <div class="flex items-center justify-between">
-                  <CommonStarRating
-                    :model-value="item.rating"
-                    size="sm"
-                  />
-                  <span class="text-xs font-bold text-amber-500">{{ item.rating }}.0 / 5.0</span>
-                </div>
+          <div class="space-y-4">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-xs font-bold tracking-widest text-[#111827] dark:text-[#FAFAFA]">
+                {{ '★'.repeat(Math.max(1, Math.min(5, item.rating || 5))) }}
+              </span>
+              <span class="font-mono text-[10px] uppercase tracking-widest text-[#6B7280] dark:text-[#737373]">
+                {{ item.rating }}.0 / 5.0
+              </span>
+            </div>
 
-                <p class="text-sm text-highlighted leading-relaxed italic">
-                  "{{ item.comment }}"
-                </p>
+            <p class="text-sm sm:text-base text-[#111827] dark:text-[#FAFAFA] leading-relaxed font-normal">
+              "{{ item.comment }}"
+            </p>
+          </div>
+
+          <div class="pt-4 border-t border-[#E5E7EB] dark:border-[#262626] flex items-end justify-between gap-4">
+            <div class="min-w-0">
+              <div class="font-mono text-xs font-bold text-[#111827] dark:text-[#FAFAFA] truncate">
+                {{ item.masked_email }}
               </div>
-
-              <div class="pt-3 border-t border-default flex items-center justify-between gap-2">
-                <div class="truncate">
-                  <div class="font-mono font-bold text-xs text-highlighted flex items-center gap-1.5">
-                    <UIcon
-                      name="i-lucide-user-check"
-                      class="w-3.5 h-3.5 text-success shrink-0"
-                    />
-                    <span>{{ item.masked_email }}</span>
-                  </div>
-                  <div class="text-xs text-primary font-medium truncate mt-0.5">
-                    {{ item.product_package_name }}
-                  </div>
-                </div>
+              <div class="text-[11px] text-[#6B7280] dark:text-[#9CA3AF] mt-0.5 truncate">
+                {{ item.product_package_name }}
               </div>
             </div>
-          </UCard>
-        </div>
+            <span class="font-mono text-[10px] text-[#6B7280] dark:text-[#737373] shrink-0">
+              {{ String(item.created_at || '').slice(0, 10) }}
+            </span>
+          </div>
+        </article>
       </div>
     </div>
   </section>

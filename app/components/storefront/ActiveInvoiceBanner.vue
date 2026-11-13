@@ -1,7 +1,7 @@
 <!-- ==========================================================================
  FILE: app/components/storefront/ActiveInvoiceBanner.vue
- DESKRIPSI: Section Card Pesanan Aktif Pembeli (Tanpa Tombol Tutup Saat
-            Status Masih Pending atau Lunas agar Tidak Rawan Salah Pencet).
+ DESKRIPSI: Baris Status Invoice Aktif Bergaya Swiss Editorial (Mempertahankan
+            Sinkronisasi Otomatis & Hitung Mundur QRIS).
 =========================================================================== -->
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
@@ -74,92 +74,60 @@ const formattedTimer = computed(() => {
 })
 
 function formatRupiah(val: number) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val)
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0
+  }).format(val)
 }
 </script>
 
 <template>
   <section
     v-if="activeInvoice"
-    class="py-6 bg-primary/5 border-t border-default"
+    class="w-full bg-[#FFFFFF] dark:bg-[#111111] border-b border-[#E5E7EB] dark:border-[#262626]"
   >
-    <UContainer class="max-w-4xl">
-      <UCard class="border-2 border-primary/50 shadow-lg bg-default">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div class="space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <UBadge
-                color="primary"
-                variant="solid"
-                size="sm"
-                icon="i-lucide-receipt"
-              >
-                Pesanan Terakhir Anda
-              </UBadge>
-              <span class="font-mono text-xs font-bold text-muted">
-                #{{ activeInvoice.invoiceId }}
-              </span>
-              <CommonInvoiceStatusBadge :status="activeInvoice.status" />
+    <div class="max-w-7xl mx-auto px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-4 text-xs">
+      <div class="flex flex-wrap items-center gap-3">
+        <CommonInvoiceStatusBadge :status="activeInvoice.status" />
 
-              <UBadge
-                v-if="activeInvoice.status === 'pending' && remainingSeconds > 0"
-                color="warning"
-                variant="subtle"
-                size="sm"
-                icon="i-lucide-timer"
-              >
-                Sisa Waktu QRIS: {{ formattedTimer }}
-              </UBadge>
-            </div>
+        <span class="font-mono font-bold text-[#111827] dark:text-[#FAFAFA]">
+          #{{ activeInvoice.invoiceId }}
+        </span>
 
-            <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-              <h3 class="text-base sm:text-lg font-extrabold text-highlighted">
-                {{ activeInvoice.productName }} — {{ activeInvoice.variantName }}
-              </h3>
-              <span class="font-mono text-lg font-extrabold text-primary">
-                {{ formatRupiah(activeInvoice.totalAmount) }}
-              </span>
-            </div>
+        <span class="text-[#4B5563] dark:text-[#A3A3A3]">
+          {{ activeInvoice.productName }} — {{ activeInvoice.variantName }}
+        </span>
 
-            <p class="text-xs text-muted">
-              <template v-if="activeInvoice.status === 'pending'">
-                Kode QRIS Anda masih aktif! Klik tombol di samping untuk kembali membuka kode QRIS Anda.
-              </template>
-              <template v-else-if="activeInvoice.status === 'lunas'">
-                Pembayaran telah Lunas! Klik tombol di samping untuk melihat detail akun dan invoice Anda.
-              </template>
-              <template v-else>
-                Waktu pembayaran untuk pesanan ini telah berakhir ({{ activeInvoice.status.toUpperCase() }}).
-              </template>
-            </p>
-          </div>
+        <span class="font-mono font-extrabold text-[#111827] dark:text-[#FAFAFA]">
+          ({{ formatRupiah(activeInvoice.totalAmount) }})
+        </span>
 
-          <div class="flex items-center gap-2 shrink-0">
-            <UButton
-              :to="`/invoice/${activeInvoice.invoiceToken}`"
-              :color="activeInvoice.status === 'lunas' ? 'success' : 'primary'"
-              size="lg"
-              :icon="activeInvoice.status === 'lunas' ? 'i-lucide-key-round' : 'i-lucide-qr-code'"
-              :label="activeInvoice.status === 'lunas' ? 'Lihat Akun & Invoice' : 'Buka Kembali QRIS'"
-              :loading="isRefreshing"
-            />
+        <span
+          v-if="activeInvoice.status === 'pending' && remainingSeconds > 0"
+          class="px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider border border-[#E5E7EB] dark:border-[#262626] text-[#111827] dark:text-[#FAFAFA]"
+        >
+          Sisa Waktu: {{ formattedTimer }}
+        </span>
+      </div>
 
-            <!-- TOMBOL SEMBUNYIKAN HANYA MUNCUL JIKA SUDAH EXPIRED / DIBATALKAN / FAILED -->
-            <UTooltip
-              v-if="activeInvoice.status !== 'pending' && activeInvoice.status !== 'lunas'"
-              text="Tutup pemberitahuan pesanan yang sudah kedaluwarsa ini"
-            >
-              <UButton
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                icon="i-lucide-x"
-                @click="clearInvoiceSession"
-              />
-            </UTooltip>
-          </div>
-        </div>
-      </UCard>
-    </UContainer>
+      <div class="flex items-center gap-4">
+        <NuxtLink
+          :to="`/invoice/${activeInvoice.invoiceToken}`"
+          class="px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider bg-[#111827] text-[#FFFFFF] dark:bg-[#FAFAFA] dark:text-[#0A0A0A] hover:opacity-85 transition-opacity"
+        >
+          {{ isRefreshing ? 'Memuat...' : (activeInvoice.status === 'lunas' ? 'Lihat Akun & Invoice' : 'Buka Kembali QRIS') }}
+        </NuxtLink>
+
+        <button
+          v-if="activeInvoice.status !== 'pending' && activeInvoice.status !== 'lunas'"
+          type="button"
+          class="font-mono text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#737373] hover:text-[#111827] dark:hover:text-[#FAFAFA] cursor-pointer"
+          @click="clearInvoiceSession()"
+        >
+          Tutup
+        </button>
+      </div>
+    </div>
   </section>
 </template>
